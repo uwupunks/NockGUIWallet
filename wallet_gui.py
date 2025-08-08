@@ -4,9 +4,60 @@ import threading
 import subprocess
 import queue
 import re
+import requests
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # --- Utility Functions ---
 
+def resolve_nockname(address):
+    try:
+        url = f"https://api.nocknames.com/resolve?address={address}"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            name = data.get("name")
+            if name:
+                return name
+            else:
+                return None
+        else:
+            return None
+    except Exception as e:
+        return None
+
+def resolve_nockaddress(name):
+    try:
+        url = f"https://api.nocknames.com/resolve?name={name}"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            address = data.get("address")
+            if address:
+                return address
+            else:
+                return None
+        else:
+            return None
+    except Exception as e:
+        return None
+
+def show_resolved_name(address):
+    if not address:
+        messagebox.showerror("Input error", "Address field is empty.")
+        return
+    name = resolve_nockname(address)
+    messagebox.showinfo("Resolved Name", f"Address: {address}\nName: {name}")
+
+def show_resolved_address(name):
+    if not name:
+        messagebox.showerror("Input error", "Name field is empty.")
+        return
+    address = resolve_nockaddress(name)
+    messagebox.showinfo("Resolved Address", f"Name: {name}\nAddress: {address}")
 def print_to_output(text):
     output_text.config(state='normal')
     output_text.insert(tk.END, text + "\n")
@@ -27,7 +78,11 @@ def update_output_text(output_text_widget, output_queue):
         pass
     output_text_widget.after(100, update_output_text, output_text_widget, output_queue)
 
-def truncate_pubkey(pk, front=8, back=8):
+def format_pubkey(pk, front=8, back=8):
+    #return resolved nockname if possible
+    name = resolve_nockname(pk)
+    if name:
+        return name
     if len(pk) <= front + back + 3:
         return pk
     return f"{pk[:front]}...{pk[-back:]}"
@@ -36,8 +91,14 @@ def truncate_pubkey(pk, front=8, back=8):
 
 def get_pubkeys():
     try:
+        # Load environment variables
+        socket_path = os.getenv('NOCKCHAIN_SOCKET')
+        if not socket_path:
+            messagebox.showerror("Error", "NOCKCHAIN_SOCKET not set in .env file")
+            return []
+            
         result = subprocess.run(
-            ["nockchain-wallet", "--nockchain-socket", "/home/nikos/nockchain/.socket/nockchain_npc.sock", "list-pubkeys"],
+            ["nockchain-wallet", "--nockchain-socket", socket_path, "list-pubkeys"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True,
             check=True
@@ -84,7 +145,7 @@ def display_pubkeys(pubkeys):
             row = tk.Frame(frame_pubkeys)
             row.pack(fill=tk.X, pady=2)
 
-            display_pk = truncate_pubkey(pubkey)
+            display_pk = format_pubkey(pubkey)
             lbl = tk.Label(row, text=f"🔑 {display_pk}", anchor="w")
             lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -175,8 +236,14 @@ def open_check_balance_window():
     entry_pubkey = tk.Entry(win, width=80)
     entry_pubkey.pack(padx=10, pady=5)
 
-    btn_check = tk.Button(win, text="Check Balance", command=on_check)
-    btn_check.pack(pady=10)
+    btn_frame = tk.Frame(win)
+    btn_frame.pack(pady=10)
+    btn_check = tk.Button(btn_frame, text="Check Balance", command=on_check)
+    btn_check.pack(side=tk.LEFT, padx=5)
+    btn_resolve = tk.Button(btn_frame, text="Resolve Name", command=lambda: show_resolved_name(entry_pubkey.get().strip()))
+    btn_resolve.pack(side=tk.LEFT, padx=5)
+    btn_resolve_addr = tk.Button(btn_frame, text="Resolve Address", command=lambda: show_resolved_address(entry_pubkey.get().strip()))
+    btn_resolve_addr.pack(side=tk.LEFT, padx=5)
 
 # --- Event Handlers ---
 
