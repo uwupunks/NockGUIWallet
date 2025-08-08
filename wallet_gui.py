@@ -151,7 +151,7 @@ def open_check_balance_window():
                 elif all(m == 1 for m in required_sigs_list):
                     status_msg = "✅ Coins are Spendable! All required signatures = 1\n"
                 else:
-                    status_msg = "❌❌❌❌ Some Coins are Unspendable! Required signatures > 1 detected❌❌❌❌\n"
+                    status_msg = "❌❌❌❌ Some Coins are Unspendable! Required signatures > 1 detected ❌❌❌❌\n"
 
                 # Prepare output
                 output = f"Total Assets: {total_assets} Nicks (~{nocks:.2f} Nocks)\n{status_msg}"
