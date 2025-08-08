@@ -137,17 +137,28 @@ def get_pubkeys():
             shell=False,
             check=True
         )
+
+        lines = result.stdout.splitlines()
         pubkeys = []
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("- Public Key:"):
-                start = line.find("'")
-                end = line.rfind("'")
-                if start != -1 and end != -1 and end > start:
-                    pubkey = line[start+1:end]
-                    if pubkey:
-                        pubkeys.append(pubkey)
+        capture = False
+        buffer = []
+
+        for line in lines:
+            if "- Public Key:" in line:
+                capture = True
+                buffer = []
+                continue
+            if capture:
+                if line.strip().startswith("- Chain Code:"):
+                    key = "".join(buffer).replace("'", "").replace("\n", "").strip()
+                    if key:
+                        pubkeys.append(key)
+                    capture = False
+                else:
+                    buffer.append(line.strip())
+
         return pubkeys
+
     except subprocess.CalledProcessError as e:
         messagebox.showerror("Error", f"Failed to get pubkeys:\n{e.stderr}")
         return []
@@ -163,7 +174,7 @@ def truncate_pubkey(pk, front=8, back=8):
     return f"{pk[:front]}...{pk[-back:]}"
 
 def on_get_pubkeys():
-    btn_get_pubkeys.config(state='disabled')  # Disable button
+    btn_get_pubkeys.config(state='disabled')
     print_to_output("⏳ Gathering Public Keys...")
 
     def worker():
@@ -192,7 +203,7 @@ def display_pubkeys(pubkeys):
             btn_copy = tk.Button(row, text="Copy", width=5, command=lambda pk=pubkey: copy_to_clipboard(pk))
             btn_copy.pack(side=tk.RIGHT)
 
-    btn_get_pubkeys.config(state='normal')  # Re-enable button
+    btn_get_pubkeys.config(state='normal')
 
 def on_send():
     inputs = [
@@ -264,4 +275,3 @@ output_text = tk.Text(root, height=20, width=80, state='disabled')
 output_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
 root.mainloop()
-
