@@ -1,99 +1,347 @@
-#!/bin/bash
+import os
+import sys
+import tkinter as tk
+from tkinter import messagebox, Toplevel
+import threading
+import subprocess
+import queue
+import re
+import datetime
 
-SOCKET=~/nockchain/.socket/nockchain_npc.sock
-TXS_DIR="$(pwd)/txs"
+# --- Detect socket path programmatically ---
 
-echo "========================================"
-echo "       Robinhood's Simple Send"
-echo "========================================"
-echo
+def detect_socket_path():
+    # Check env var first
+    socket_path = os.environ.get("NOCKCHAIN_SOCKET")
+    if socket_path and os.path.exists(socket_path):
+        return socket_path
 
-# Prompt inputs
-read -rp $'📤 Sender pubkey:\n> ' sender
-read -rp $'📥 Recipient pubkey:\n> ' recipient
-read -rp $'🎁 Gift amount:\n> ' gift
-read -rp $'💸 Fee amount:\n> ' fee
+    # Common candidate paths relative to home directory
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(home, ".nockchain", ".socket", "nockchain_npc.sock"),
+        os.path.join(home, "nockchain", ".socket", "nockchain_npc.sock"),
+        os.path.join(home, "nockchain", "socket", "nockchain_npc.sock"),  # your requested path
+        "/tmp/nockchain_npc.sock",
+    ]
 
-total=$((gift + fee))
-echo -e "\n➕ Total amount needed (gift + fee): $total\n"
+    return next((path for path in candidates if os.path.exists(path)), None)
 
-csvfile="notes-${sender}.csv"
+SOCKET_PATH = detect_socket_path()
 
-echo "📂 Exporting notes CSV, please wait..."
-if ! nockchain-wallet --nockchain-socket "$SOCKET" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
-  echo "❌ Failed to export notes CSV. Please check your wallet and connection."
-  exit 1
-fi
+if SOCKET_PATH is None:
+    tk.Tk().withdraw()  # hide root window before messagebox
+    messagebox.showerror(
+        "Error",
+        "Nockchain socket path not found.\n"
+        "Please set NOCKCHAIN_SOCKET environment variable or place socket in a default location:\n"
+        "~/.nockchain/.socket/nockchain_npc.sock\n"
+        "~/nockchain/.socket/nockchain_npc.sock\n"
+        "~/nockchain/socket/nockchain_npc.sock\n"
+        "/tmp/nockchain_npc.sock"
+    )
+    sys.exit(1)
 
-echo -n "⏳ Waiting for notes file ($csvfile)... "
-while [ ! -f "$csvfile" ]; do
-  sleep 1
-done
-echo "Found!"
+# --- Utility Functions ---
 
-# Select notes until total assets cover required amount
-selected_notes=()
-selected_assets=0
-while IFS=',' read -r name_first name_last assets _block_height _source_hash; do
-  [[ "$name_first" == "name_first" ]] && continue
-  selected_notes+=("$name_first $name_last")
-  selected_assets=$((selected_assets + assets))
-  if [ "$selected_assets" -ge "$total" ]; then
-    break
-  fi
-done < "$csvfile"
+def print_to_output(text):
+    output_text.config(state='normal')
+    output_text.insert(tk.END, text + "\n")
+    output_text.see(tk.END)
+    output_text.config(state='disabled')
 
-if [ "$selected_assets" -lt "$total" ]; then
-  echo "❌ Insufficient funds: found $selected_assets, need $total"
-  exit 1
-fi
+def update_output_text(output_text_widget, output_queue):
+    try:
+        while True:
+            item = output_queue.get_nowait()
+            if item is None:
+                return
+            output_text_widget.config(state='normal')
+            output_text_widget.insert(tk.END, item)
+            output_text_widget.see(tk.END)
+            output_text_widget.config(state='disabled')
+    except queue.Empty:
+        pass
+    output_text_widget.after(100, update_output_text, output_text_widget, output_queue)
 
-echo "✅ Selected notes: ${selected_notes[*]}"
-echo "💰 Total assets selected: $selected_assets"
+def truncate_pubkey(pk, front=8, back=8):
+    if len(pk) <= front + back + 3:
+        return pk
+    return f"{pk[:front]}...{pk[-back:]}"
 
-# Build --names argument for spend command
-names_arg=""
-for note in "${selected_notes[@]}"; do
-  if [ -n "$names_arg" ]; then
-    names_arg+=","
-  fi
-  names_arg+="[$note]"
-done
+# --- Pubkey Fetching & Display ---
 
-# Build --recipients argument (single recipient at index 1)
-recipients_arg="[1 $recipient]"
+def get_pubkeys():
+    try:
+        result = subprocess.run(
+            ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH, "list-pubkeys"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        lines = result.stdout.splitlines()
+        pubkeys = []
+        capture = False
+        buffer = []
 
-# Prepare transaction directory
-mkdir -p "$TXS_DIR"
+        for line in lines:
+            if "- Public Key:" in line:
+                capture = True
+                buffer = []
+                continue
+            if capture:
+                if line.strip().startswith("- Chain Code:"):
+                    key = "".join(buffer).replace("'", "").replace("\n", "").strip()
+                    if key:
+                        pubkeys.append(key)
+                    capture = False
+                else:
+                    buffer.append(line.strip())
+        return pubkeys
 
-echo -e "\n🧹 Cleaning transaction folder ($TXS_DIR)..."
-ls -1 "$TXS_DIR"
-rm -f "$TXS_DIR"/*
-echo "🗑️ Folder cleaned."
+    except subprocess.CalledProcessError as e:
+        messagebox.showerror("Error", f"Failed to get pubkeys:\n{e.stderr}")
+        return []
 
-echo -e "\n🛠️ Creating draft transaction..."
-if ! nockchain-wallet --nockchain-socket "$SOCKET" spend \
-  --names "$names_arg" \
-  --recipients "$recipients_arg" \
-  --gifts "$gift" \
-  --fee "$fee" >/dev/null 2>&1; then
-  echo "❌ Failed to create draft transaction."
-  exit 1
-fi
+def copy_to_clipboard(pubkey):
+    root.clipboard_clear()
+    root.clipboard_append(pubkey)
+    messagebox.showinfo("Copied", f"Copied pubkey:\n{pubkey}")
 
-# Pick any .tx file in txs directory
-txfile=$(find "$TXS_DIR" -maxdepth 1 -type f -name '*.tx' | head -n 1)
+def display_pubkeys(pubkeys):
+    for widget in frame_pubkeys.winfo_children():
+        widget.destroy()
 
-if [[ -z "$txfile" ]]; then
-  echo "❌ No transaction file found in $TXS_DIR after creating draft."
-  exit 1
-fi
+    if not pubkeys:
+        label = tk.Label(frame_pubkeys, text="(No pubkeys found. Click 'Get Pubkeys' to fetch.)", fg="red", bg="#C0C0C0")
+        label.pack(pady=5)
+    else:
+        for pubkey in pubkeys:
+            row = tk.Frame(frame_pubkeys, bg="#C0C0C0")
+            row.pack(fill=tk.X, pady=2)
 
-echo "✅ Draft transaction created: $txfile"
+            display_pk = truncate_pubkey(pubkey)
+            lbl = tk.Label(row, text=f"🔑 {display_pk}", anchor="w", bg="#C0C0C0")
+            lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-echo "🚀 Sending transaction..."
-if nockchain-wallet --nockchain-socket "$SOCKET" send-tx "$txfile" >/dev/null 2>&1; then
-  echo "✅ Transaction sent successfully!"
-else
-  echo "❌ Failed to send transaction."
-fi
+            btn_copy = tk.Button(row, text="Copy", width=5, command=lambda pk=pubkey: copy_to_clipboard(pk))
+            btn_copy.pack(side=tk.RIGHT)
+
+# --- Check Balance Window ---
+
+def open_check_balance_window():
+    def on_check():
+        pubkey = entry_pubkey.get().strip()
+        if not pubkey:
+            messagebox.showerror("Input error", "Please enter a pubkey.")
+            return
+        if not re.fullmatch(r"[A-Za-z0-9]+", pubkey):
+            messagebox.showerror("Input error", "❌ Invalid pubkey format. Only alphanumeric characters allowed.")
+            return
+
+        output_text.config(state='normal')
+        output_text.delete('1.0', tk.END)
+        output_text.insert(tk.END, f"🔍 Checking balance for:\n{pubkey}\n\nLoading...\n")
+        output_text.config(state='disabled')
+
+        q = queue.Queue()
+
+        def run_check_balance():
+            try:
+                proc = subprocess.Popen(
+                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH,
+                     "list-notes-by-pubkey", pubkey],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                total_assets = 0
+                required_sigs_list = []
+
+                for line in proc.stdout:
+                    # Append to output immediately optional, but here we just process
+                    m_asset = re.search(r"- Assets:\s*(\d+)", line)
+                    if m_asset:
+                        total_assets += int(m_asset.group(1))
+
+                    m_sig = re.search(r"- Required Signatures:\s*(\d+)", line)
+                    if m_sig:
+                        required_sigs_list.append(int(m_sig.group(1)))
+
+                proc.stdout.close()
+                proc.wait()
+
+                nocks = total_assets / 65536
+
+                if not required_sigs_list:
+                    status_msg = "ℹ️ No 'Required Signatures' info found in notes.\n"
+                elif all(m == 1 for m in required_sigs_list):
+                    status_msg = "✅ Coins are Spendable! All required signatures = 1\n"
+                else:
+                    status_msg = "❌❌❌❌ Some Coins are Unspendable! Required signatures > 1 detected ❌❌❌❌\n"
+
+                output = f"Total Assets: {total_assets} Nicks (~{nocks:.2f} Nocks)\n{status_msg}"
+
+                q.put(output)
+            except Exception as e:
+                q.put(f"Error checking balance: {e}\n")
+            finally:
+                q.put(None)
+
+        threading.Thread(target=run_check_balance, daemon=True).start()
+        update_output_text(output_text, q)
+
+        win.destroy()
+
+    win = Toplevel(root)
+    win.title("Check Balance")
+
+    tk.Label(win, text="Enter pubkey:").pack(padx=10, pady=5)
+    entry_pubkey = tk.Entry(win, width=80)
+    entry_pubkey.pack(padx=10, pady=5)
+
+    btn_check = tk.Button(win, text="Check Balance", command=on_check)
+    btn_check.pack(pady=10)
+
+# --- Event Handlers ---
+
+def on_get_pubkeys():
+    btn_get_pubkeys.config(state='disabled')
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, "🔑 Fetching Pubkeys...\nLoading...\n")
+    output_text.config(state='disabled')
+
+    def worker():
+        pubkeys = get_pubkeys()
+        def update_ui():
+            display_pubkeys(pubkeys)
+            output_text.config(state='normal')
+            output_text.insert(tk.END, "\n✅ Pubkeys Loaded.\n")
+            output_text.config(state='disabled')
+            btn_get_pubkeys.config(state='normal')
+        root.after(0, update_ui)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+def on_send():
+    inputs = [
+        entry_sender.get().strip(),
+        entry_recipient.get().strip(),
+        entry_gift.get().strip(),
+        entry_fee.get().strip()
+    ]
+    if not all(inputs):
+        messagebox.showerror("Input error", "Please fill all fields.")
+        return
+    if not all(re.fullmatch(r"[A-Za-z0-9]+", inputs[i]) for i in (0, 1)):
+        messagebox.showerror("Input error", "❌ Sender and Recipient pubkeys must be alphanumeric.")
+        return
+    if not (inputs[2].isdigit() and inputs[3].isdigit()):
+        messagebox.showerror("Input error", "Gift and Fee must be numeric.")
+        return
+
+    btn_send.config(state='disabled')
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, "⏳ Sending transaction...\n")
+    output_text.config(state='disabled')
+
+    q = queue.Queue()
+
+    def run_send():
+        try:
+            proc = subprocess.Popen(
+                ["./sendsimple.sh", "--nockchain-socket", SOCKET_PATH],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            # Provide input lines
+            proc.stdin.write("\n".join(inputs) + "\n")
+            proc.stdin.flush()
+            proc.stdin.close()
+
+            for line in proc.stdout:
+                q.put(line)
+            proc.stdout.close()
+            proc.wait()
+        except Exception as e:
+            q.put(f"Error sending transaction: {e}\n")
+        finally:
+            q.put(None)
+
+    threading.Thread(target=run_send, daemon=True).start()
+    update_output_text(output_text, q)
+
+    def reenable_btn():
+        btn_send.config(state='normal')
+    # Wait ~10s then reenable send button (adjust if needed)
+    root.after(10000, reenable_btn)
+
+# --- Date/Time Footer ---
+
+def update_datetime_label():
+    now = datetime.datetime.now()
+    formatted = now.strftime("%b %d %H:%M")
+    datetime_label.config(text=formatted)
+    root.after(1000, update_datetime_label)
+
+# --- Main Window Setup ---
+
+root = tk.Tk()
+root.title("Robinhood's Nockchain GUI Wallet")
+root.geometry("900x700")
+root.configure(bg="#C0C0C0")
+
+# Frame for pubkeys list
+frame_pubkeys = tk.Frame(root, bg="#C0C0C0")
+frame_pubkeys.pack(fill=tk.X, padx=10, pady=5)
+
+btn_get_pubkeys = tk.Button(root, text="Get Pubkeys", command=on_get_pubkeys)
+btn_get_pubkeys.pack(pady=5)
+
+# Buttons and output text
+frame_buttons = tk.Frame(root, bg="#C0C0C0")
+frame_buttons.pack(pady=10)
+
+btn_check_balance = tk.Button(frame_buttons, text="Check Balance", command=open_check_balance_window)
+btn_check_balance.pack(side=tk.LEFT, padx=5)
+
+# Send transaction frame
+frame_send = tk.LabelFrame(root, text="Send Transaction", bg="#C0C0C0")
+frame_send.pack(fill=tk.X, padx=10, pady=10)
+
+tk.Label(frame_send, text="Sender Pubkey:", bg="#C0C0C0").grid(row=0, column=0, sticky=tk.E, padx=5, pady=3)
+entry_sender = tk.Entry(frame_send, width=70)
+entry_sender.grid(row=0, column=1, padx=5, pady=3)
+
+tk.Label(frame_send, text="Recipient Pubkey:", bg="#C0C0C0").grid(row=1, column=0, sticky=tk.E, padx=5, pady=3)
+entry_recipient = tk.Entry(frame_send, width=70)
+entry_recipient.grid(row=1, column=1, padx=5, pady=3)
+
+tk.Label(frame_send, text="Gift (Nicks):", bg="#C0C0C0").grid(row=2, column=0, sticky=tk.E, padx=5, pady=3)
+entry_gift = tk.Entry(frame_send, width=20)
+entry_gift.grid(row=2, column=1, sticky=tk.W, padx=5, pady=3)
+
+tk.Label(frame_send, text="Fee (Nicks):", bg="#C0C0C0").grid(row=3, column=0, sticky=tk.E, padx=5, pady=3)
+entry_fee = tk.Entry(frame_send, width=20)
+entry_fee.grid(row=3, column=1, sticky=tk.W, padx=5, pady=3)
+
+btn_send = tk.Button(frame_send, text="Send Transaction", command=on_send)
+btn_send.grid(row=4, column=1, sticky=tk.W, padx=5, pady=10)
+
+# Output Text box
+output_text = tk.Text(root, height=15, bg="#E0E0E0", relief=tk.SUNKEN, borderwidth=2)
+output_text.config(state='disabled')
+output_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+# Footer datetime label
+datetime_label = tk.Label(root, text="", font=("Consolas", 10), bg="#C0C0C0", fg="black", anchor="e")
+datetime_label.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=3)
+update_datetime_label()
+
+root.mainloop()
