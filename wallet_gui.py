@@ -79,24 +79,12 @@ def get_pubkeys():
             text=True,
             check=True
         )
-        lines = result.stdout.splitlines()
         pubkeys = []
-        capture = False
-        buffer = []
-
-        for line in lines:
-            if "- Public Key:" in line:
-                capture = True
-                buffer = []
-                continue
-            if capture:
-                if line.strip().startswith("- Chain Code:"):
-                    key = "".join(buffer).replace("'", "").replace("\n", "").strip()
-                    if key:
-                        pubkeys.append(key)
-                    capture = False
-                else:
-                    buffer.append(line.strip())
+        for line in result.stdout.splitlines():
+            # Match line like: - Public Key: 'abcdef1234...'
+            m = re.match(r"- Public Key:\s*'([A-Za-z0-9]+)'", line.strip())
+            if m:
+                pubkeys.append(m.group(1))
         return pubkeys
 
     except subprocess.CalledProcessError as e:
@@ -332,16 +320,15 @@ entry_fee = tk.Entry(frame_send, width=20)
 entry_fee.grid(row=3, column=1, sticky=tk.W, padx=5, pady=3)
 
 btn_send = tk.Button(frame_send, text="Send Transaction", command=on_send)
-btn_send.grid(row=4, column=1, sticky=tk.W, padx=5, pady=10)
+btn_send.grid(row=4, column=0, columnspan=2, pady=10)
 
-# Output Text box
-output_text = tk.Text(root, height=15, bg="#E0E0E0", relief=tk.SUNKEN, borderwidth=2)
-output_text.config(state='disabled')
-output_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+# Output text box
+output_text = tk.Text(root, height=20, width=110, bg="#E0E0E0", fg="#000000", state='disabled')
+output_text.pack(padx=10, pady=10)
 
-# Footer datetime label
-datetime_label = tk.Label(root, text="", font=("Consolas", 10), bg="#C0C0C0", fg="black", anchor="e")
-datetime_label.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=3)
+# Date/time label at bottom
+datetime_label = tk.Label(root, bg="#C0C0C0", fg="#404040")
+datetime_label.pack(side=tk.BOTTOM, pady=5)
 update_datetime_label()
 
 root.mainloop()
