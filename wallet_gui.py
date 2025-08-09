@@ -7,6 +7,7 @@ import subprocess
 import queue
 import re
 import datetime
+import requests  # Added for API calls
 
 # --- Detect socket path programmatically ---
 
@@ -21,7 +22,7 @@ def detect_socket_path():
     candidates = [
         os.path.join(home, ".nockchain", ".socket", "nockchain_npc.sock"),
         os.path.join(home, "nockchain", ".socket", "nockchain_npc.sock"),
-        os.path.join(home, "nockchain", "socket", "nockchain_npc.sock"),  # your requested path
+        os.path.join(home, "nockchain", "socket", "nockchain_npc.sock"),
         "/tmp/nockchain_npc.sock",
     ]
 
@@ -81,7 +82,6 @@ def get_pubkeys():
         )
         pubkeys = []
         for line in result.stdout.splitlines():
-            # Match line like: - Public Key: 'abcdef1234...'
             m = re.match(r"- Public Key:\s*'([A-Za-z0-9]+)'", line.strip())
             if m:
                 pubkeys.append(m.group(1))
@@ -148,7 +148,6 @@ def open_check_balance_window():
                 required_sigs_list = []
 
                 for line in proc.stdout:
-                    # Append to output immediately optional, but here we just process
                     m_asset = re.search(r"- Assets:\s*(\d+)", line)
                     if m_asset:
                         total_assets += int(m_asset.group(1))
@@ -248,7 +247,6 @@ def on_send():
                 text=True,
                 bufsize=1
             )
-            # Provide input lines
             proc.stdin.write("\n".join(inputs) + "\n")
             proc.stdin.flush()
             proc.stdin.close()
@@ -267,7 +265,6 @@ def on_send():
 
     def reenable_btn():
         btn_send.config(state='normal')
-    # Wait ~10s then reenable send button (adjust if needed)
     root.after(10000, reenable_btn)
 
 # --- Date/Time Footer ---
@@ -278,57 +275,212 @@ def update_datetime_label():
     datetime_label.config(text=formatted)
     root.after(1000, update_datetime_label)
 
-# --- Main Window Setup ---
+# --- Nocknames API Calls ---
+
+def resolve_nockname(address):
+    try:
+        url = f"https://api.nocknames.com/resolve?address={address}"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            name = data.get("name")
+            if name:
+                return name
+            else:
+                return None
+        else:
+            return None
+    except Exception:
+        return None
+
+def resolve_nockaddress(name):
+    try:
+        url = f"https://api.nocknames.com/resolve?name={name}"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            address = data.get("address")
+            if address:
+                return address
+            else:
+                return None
+        else:
+            return None
+    except Exception:
+        return None
+
+# --- Nocknames Window ---
+
+def open_nocknames_window():
+    win = Toplevel(root)
+    win.title("Nocknames")
+    win.geometry("900x700")
+    win.configure(bg="#C0C0C0")
+
+    # Register New button
+    def open_register():
+        import webbrowser
+        webbrowser.open("https://nocknames.com")
+
+    btn_register = tk.Button(win, text="Register New", command=open_register, width=15)
+    btn_register.pack(pady=15)
+
+    # Separator line
+    sep = tk.Frame(win, height=2, bd=1, relief=tk.SUNKEN, bg="black")
+    sep.pack(fill=tk.X, padx=5, pady=5)
+
+    # Resolve Address Section
+    frame_resolve_address = tk.LabelFrame(win, text="Resolve Name from Address", bg="#C0C0C0")
+    frame_resolve_address.pack(fill=tk.X, padx=20, pady=10)
+
+    lbl_address = tk.Label(frame_resolve_address, text="Address:", bg="#C0C0C0")
+    lbl_address.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+    entry_address = tk.Entry(frame_resolve_address, width=60)
+    entry_address.grid(row=0, column=1, padx=5, pady=5)
+
+    btn_resolve_address = tk.Button(frame_resolve_address, text="Resolve", width=12)
+    btn_resolve_address.grid(row=0, column=2, padx=5, pady=5)
+
+    txt_resolved_name = tk.Text(frame_resolve_address, height=3, width=60, state='disabled', bg="#F0F0F0")
+    txt_resolved_name.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
+
+    btn_copy_name = tk.Button(frame_resolve_address, text="Copy", width=10)
+    btn_copy_name.grid(row=2, column=2, padx=5, pady=5, sticky="e")
+
+    # Resolve Name Section
+    frame_resolve_name = tk.LabelFrame(win, text="Resolve Address from Name", bg="#C0C0C0")
+    frame_resolve_name.pack(fill=tk.X, padx=20, pady=10)
+
+    lbl_name = tk.Label(frame_resolve_name, text="Name:", bg="#C0C0C0")
+    lbl_name.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+    entry_name = tk.Entry(frame_resolve_name, width=60)
+    entry_name.grid(row=0, column=1, padx=5, pady=5)
+
+    btn_resolve_name = tk.Button(frame_resolve_name, text="Resolve", width=12)
+    btn_resolve_name.grid(row=0, column=2, padx=5, pady=5)
+
+    txt_resolved_address = tk.Text(frame_resolve_name, height=3, width=60, state='disabled', bg="#F0F0F0")
+    txt_resolved_address.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
+
+    btn_copy_address = tk.Button(frame_resolve_name, text="Copy", width=10)
+    btn_copy_address.grid(row=2, column=2, padx=5, pady=5, sticky="e")
+
+    # Copy helper functions
+    def copy_text(widget):
+        root.clipboard_clear()
+        text = widget.get('1.0', tk.END).strip()
+        if text:
+            root.clipboard_append(text)
+            messagebox.showinfo("Copied", "Copied to clipboard.")
+        else:
+            messagebox.showwarning("Warning", "Nothing to copy.")
+
+    btn_copy_name.config(command=lambda: copy_text(txt_resolved_name))
+    btn_copy_address.config(command=lambda: copy_text(txt_resolved_address))
+
+    # Resolve button functions
+    def on_resolve_address():
+        address = entry_address.get().strip()
+        if not address:
+            messagebox.showerror("Input error", "Address field is empty.")
+            return
+        txt_resolved_name.config(state='normal')
+        txt_resolved_name.delete('1.0', tk.END)
+        txt_resolved_name.insert(tk.END, "Resolving...")
+        txt_resolved_name.config(state='disabled')
+
+        def worker():
+            name = resolve_nockname(address)
+            result = name if name else "(No name found)"
+            def update_ui():
+                txt_resolved_name.config(state='normal')
+                txt_resolved_name.delete('1.0', tk.END)
+                txt_resolved_name.insert(tk.END, result)
+                txt_resolved_name.config(state='disabled')
+            win.after(0, update_ui)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def on_resolve_name():
+        name = entry_name.get().strip()
+        if not name:
+            messagebox.showerror("Input error", "Name field is empty.")
+            return
+        txt_resolved_address.config(state='normal')
+        txt_resolved_address.delete('1.0', tk.END)
+        txt_resolved_address.insert(tk.END, "Resolving...")
+        txt_resolved_address.config(state='disabled')
+
+        def worker():
+            address = resolve_nockaddress(name)
+            result = address if address else "(No address found)"
+            def update_ui():
+                txt_resolved_address.config(state='normal')
+                txt_resolved_address.delete('1.0', tk.END)
+                txt_resolved_address.insert(tk.END, result)
+                txt_resolved_address.config(state='disabled')
+            win.after(0, update_ui)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    btn_resolve_address.config(command=on_resolve_address)
+    btn_resolve_name.config(command=on_resolve_name)
+
+# --- Main Window ---
 
 root = tk.Tk()
 root.title("Robinhood's Nockchain GUI Wallet")
 root.geometry("900x700")
 root.configure(bg="#C0C0C0")
 
-# Frame for pubkeys list
+# Top frame for buttons
+top_frame = tk.Frame(root, bg="#C0C0C0")
+top_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+
+btn_get_pubkeys = tk.Button(top_frame, text="Get Pubkeys", command=on_get_pubkeys, width=15)
+btn_get_pubkeys.pack(side=tk.LEFT, padx=5)
+
+btn_check_balance = tk.Button(top_frame, text="Check Balance", command=open_check_balance_window, width=15)
+btn_check_balance.pack(side=tk.LEFT, padx=5)
+
+btn_nocknames = tk.Button(top_frame, text="Nocknames", command=open_nocknames_window, width=15)
+btn_nocknames.pack(side=tk.LEFT, padx=5)
+
+# Frame for pubkeys
 frame_pubkeys = tk.Frame(root, bg="#C0C0C0")
 frame_pubkeys.pack(fill=tk.X, padx=10, pady=5)
-
-btn_get_pubkeys = tk.Button(root, text="Get Pubkeys", command=on_get_pubkeys)
-btn_get_pubkeys.pack(pady=5)
-
-# Buttons and output text
-frame_buttons = tk.Frame(root, bg="#C0C0C0")
-frame_buttons.pack(pady=10)
-
-btn_check_balance = tk.Button(frame_buttons, text="Check Balance", command=open_check_balance_window)
-btn_check_balance.pack(side=tk.LEFT, padx=5)
 
 # Send transaction frame
 frame_send = tk.LabelFrame(root, text="Send Transaction", bg="#C0C0C0")
 frame_send.pack(fill=tk.X, padx=10, pady=10)
 
-tk.Label(frame_send, text="Sender Pubkey:", bg="#C0C0C0").grid(row=0, column=0, sticky=tk.E, padx=5, pady=3)
+tk.Label(frame_send, text="Sender Pubkey:", bg="#C0C0C0").grid(row=0, column=0, sticky="e", padx=5, pady=5)
 entry_sender = tk.Entry(frame_send, width=70)
-entry_sender.grid(row=0, column=1, padx=5, pady=3)
+entry_sender.grid(row=0, column=1, padx=5, pady=5)
 
-tk.Label(frame_send, text="Recipient Pubkey:", bg="#C0C0C0").grid(row=1, column=0, sticky=tk.E, padx=5, pady=3)
+tk.Label(frame_send, text="Recipient Pubkey:", bg="#C0C0C0").grid(row=1, column=0, sticky="e", padx=5, pady=5)
 entry_recipient = tk.Entry(frame_send, width=70)
-entry_recipient.grid(row=1, column=1, padx=5, pady=3)
+entry_recipient.grid(row=1, column=1, padx=5, pady=5)
 
-tk.Label(frame_send, text="Gift (Nicks):", bg="#C0C0C0").grid(row=2, column=0, sticky=tk.E, padx=5, pady=3)
+tk.Label(frame_send, text="Gift (Nicks):", bg="#C0C0C0").grid(row=2, column=0, sticky="e", padx=5, pady=5)
 entry_gift = tk.Entry(frame_send, width=20)
-entry_gift.grid(row=2, column=1, sticky=tk.W, padx=5, pady=3)
+entry_gift.grid(row=2, column=1, sticky="w", padx=5, pady=5)
 
-tk.Label(frame_send, text="Fee (Nicks):", bg="#C0C0C0").grid(row=3, column=0, sticky=tk.E, padx=5, pady=3)
+tk.Label(frame_send, text="Fee (Nicks):", bg="#C0C0C0").grid(row=3, column=0, sticky="e", padx=5, pady=5)
 entry_fee = tk.Entry(frame_send, width=20)
-entry_fee.grid(row=3, column=1, sticky=tk.W, padx=5, pady=3)
+entry_fee.grid(row=3, column=1, sticky="w", padx=5, pady=5)
 
 btn_send = tk.Button(frame_send, text="Send Transaction", command=on_send)
 btn_send.grid(row=4, column=0, columnspan=2, pady=10)
 
 # Output text box
-output_text = tk.Text(root, height=20, width=110, bg="#E0E0E0", fg="#000000", state='disabled')
-output_text.pack(padx=10, pady=10)
+output_text = tk.Text(root, height=20, bg="#F0F0F0", fg="black", state='disabled')
+output_text.pack(fill=tk.BOTH, padx=10, pady=10, expand=True)
 
-# Date/time label at bottom
-datetime_label = tk.Label(root, bg="#C0C0C0", fg="#404040")
+# Date/time label
+datetime_label = tk.Label(root, text="", bg="#C0C0C0")
 datetime_label.pack(side=tk.BOTTOM, pady=5)
+
 update_datetime_label()
 
-root.mainloop()
+root.mainloop()  
