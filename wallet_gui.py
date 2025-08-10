@@ -82,19 +82,27 @@ def get_pubkeys():
         )
         pubkeys = []
         lines = result.stdout.splitlines()
+
         for i, line in enumerate(lines):
-            if line.strip() == "- Public Key:":
-                # Next line should contain the public key in single quotes
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
-                    m = re.match(r"'(.+)'", next_line)
-                    if m:
-                        pubkeys.append(m.group(1))
+            # Case 1: Same line contains the pubkey
+            m_inline = re.search(r"- Public Key:\s*'([^']+)'", line)
+            if m_inline:
+                pubkeys.append(m_inline.group(1))
+                continue
+
+            # Case 2: Just the label on this line, pubkey on next line
+            if line.strip() == "- Public Key:" and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                m_next = re.match(r"'(.+)'", next_line)
+                if m_next:
+                    pubkeys.append(m_next.group(1))
+
         return pubkeys
 
     except subprocess.CalledProcessError as e:
         messagebox.showerror("Error", f"Failed to get pubkeys:\n{e.stderr}")
         return []
+
 
 def copy_to_clipboard(pubkey):
     root.clipboard_clear()
