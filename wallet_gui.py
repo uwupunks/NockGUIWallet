@@ -81,10 +81,15 @@ def get_pubkeys():
             check=True
         )
         pubkeys = []
-        for line in result.stdout.splitlines():
-            m = re.match(r"- Public Key:\s*'([A-Za-z0-9]+)'", line.strip())
-            if m:
-                pubkeys.append(m.group(1))
+        lines = result.stdout.splitlines()
+        for i, line in enumerate(lines):
+            if line.strip() == "- Public Key:":
+                # Next line should contain the public key in single quotes
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    m = re.match(r"'(.+)'", next_line)
+                    if m:
+                        pubkeys.append(m.group(1))
         return pubkeys
 
     except subprocess.CalledProcessError as e:
