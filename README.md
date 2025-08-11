@@ -6,9 +6,11 @@ sudo apt install python3 python3-tk
 
 Place all files inside your nockchain directory
 
+Be sure to have a nockchain node running
+
 run:
 
 python3 wallet_gui.py
 
-Be sure to have a nockchain node running
+
 
