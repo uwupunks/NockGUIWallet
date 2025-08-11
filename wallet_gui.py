@@ -26,7 +26,17 @@ def detect_socket_path():
         "/tmp/nockchain_npc.sock",
     ]
 
-    return next((path for path in candidates if os.path.exists(path)), None)
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+
+    # --- Catch-all: recursive search for socket filename under home ---
+    for root_dir, dirs, files in os.walk(home):
+        if "nockchain_npc.sock" in files:
+            return os.path.join(root_dir, "nockchain_npc.sock")
+
+    return None
+
 
 SOCKET_PATH = detect_socket_path()
 
