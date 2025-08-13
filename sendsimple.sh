@@ -72,7 +72,7 @@ rm -f "$TXS_DIR"/*
 echo "🗑️ Folder cleaned."
 
 echo -e "\n🛠️ Creating draft transaction..."
-if ! nockchain-wallet --nockchain-socket "$SOCKET" spend \
+if ! nockchain-wallet --nockchain-socket "$SOCKET" create-tx \
   --names "$names_arg" \
   --recipients "$recipients_arg" \
   --gifts "$gift" \
