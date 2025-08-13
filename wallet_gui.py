@@ -138,15 +138,15 @@ def display_pubkeys(pubkeys):
         widget.destroy()
 
     if not pubkeys:
-        label = tk.Label(frame_pubkeys, text="(No pubkeys found. Click 'Get Pubkeys' to fetch.)", fg="red")
+        label = tk.Label(frame_pubkeys, text="(No pubkeys found. Click 'Get Pubkeys' to fetch.)", fg="red", bg="#C0C0C0")
         label.pack(pady=5)
     else:
         for pubkey in pubkeys:
-            row = tk.Frame(frame_pubkeys)
+            row = tk.Frame(frame_pubkeys, bg="#C0C0C0")
             row.pack(fill=tk.X, pady=2)
 
             display_pk = truncate_pubkey(pubkey)
-            lbl = tk.Label(row, text=f"🔑 {display_pk}", anchor="w")
+            lbl = tk.Label(row, text=f"🔑 {display_pk}", anchor="w", bg="#C0C0C0")
             lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
             btn_copy = tk.Button(row, text="Copy", width=5, command=lambda pk=pubkey: copy_to_clipboard(pk))
@@ -352,6 +352,7 @@ def open_nocknames_window():
     win = Toplevel(root)
     win.title("Nocknames")
     win.geometry("900x700")
+    win.configure(bg="#C0C0C0")
 
     # Register New button
     def open_register():
@@ -366,10 +367,10 @@ def open_nocknames_window():
     sep.pack(fill=tk.X, padx=5, pady=5)
 
     # Resolve Address Section
-    frame_resolve_address = tk.LabelFrame(win, text="Resolve Name from Address")
+    frame_resolve_address = tk.LabelFrame(win, text="Resolve Name from Address", bg="#C0C0C0")
     frame_resolve_address.pack(fill=tk.X, padx=20, pady=10)
 
-    lbl_address = tk.Label(frame_resolve_address, text="Address:")
+    lbl_address = tk.Label(frame_resolve_address, text="Address:", bg="#C0C0C0")
     lbl_address.grid(row=0, column=0, sticky="w", padx=5, pady=5)
     entry_address = tk.Entry(frame_resolve_address, width=60)
     entry_address.grid(row=0, column=1, padx=5, pady=5)
@@ -377,17 +378,17 @@ def open_nocknames_window():
     btn_resolve_address = tk.Button(frame_resolve_address, text="Resolve", width=12)
     btn_resolve_address.grid(row=0, column=2, padx=5, pady=5)
 
-    txt_resolved_name = tk.Text(frame_resolve_address, height=3, width=60, state='disabled')
+    txt_resolved_name = tk.Text(frame_resolve_address, height=3, width=60, state='disabled', bg="#F0F0F0")
     txt_resolved_name.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
 
     btn_copy_name = tk.Button(frame_resolve_address, text="Copy", width=10)
     btn_copy_name.grid(row=2, column=2, padx=5, pady=5, sticky="e")
 
     # Resolve Name Section
-    frame_resolve_name = tk.LabelFrame(win, text="Resolve Address from Name")
+    frame_resolve_name = tk.LabelFrame(win, text="Resolve Address from Name", bg="#C0C0C0")
     frame_resolve_name.pack(fill=tk.X, padx=20, pady=10)
 
-    lbl_name = tk.Label(frame_resolve_name, text="Name:")
+    lbl_name = tk.Label(frame_resolve_name, text="Name:", bg="#C0C0C0")
     lbl_name.grid(row=0, column=0, sticky="w", padx=5, pady=5)
     entry_name = tk.Entry(frame_resolve_name, width=60)
     entry_name.grid(row=0, column=1, padx=5, pady=5)
@@ -395,7 +396,7 @@ def open_nocknames_window():
     btn_resolve_name = tk.Button(frame_resolve_name, text="Resolve", width=12)
     btn_resolve_name.grid(row=0, column=2, padx=5, pady=5)
 
-    txt_resolved_address = tk.Text(frame_resolve_name, height=3, width=60, state='disabled')
+    txt_resolved_address = tk.Text(frame_resolve_name, height=3, width=60, state='disabled', bg="#F0F0F0")
     txt_resolved_address.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
 
     btn_copy_address = tk.Button(frame_resolve_name, text="Copy", width=10)
@@ -467,9 +468,10 @@ def open_nocknames_window():
 root = tk.Tk()
 root.title("Robinhood's Nockchain GUI Wallet")
 root.geometry("900x700")
+root.configure(bg="#C0C0C0")
 
 # Top frame for buttons
-top_frame = tk.Frame(root)
+top_frame = tk.Frame(root, bg="#C0C0C0")
 top_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
 
 btn_get_pubkeys = tk.Button(top_frame, text="Get Pubkeys", command=on_get_pubkeys, width=15)
@@ -482,26 +484,26 @@ btn_nocknames = tk.Button(top_frame, text="Nocknames", command=open_nocknames_wi
 btn_nocknames.pack(side=tk.LEFT, padx=5)
 
 # Frame for pubkeys
-frame_pubkeys = tk.Frame(root)
+frame_pubkeys = tk.Frame(root, bg="#C0C0C0")
 frame_pubkeys.pack(fill=tk.X, padx=10, pady=5)
 
 # Send transaction frame
-frame_send = tk.LabelFrame(root, text="Send Transaction")
+frame_send = tk.LabelFrame(root, text="Send Transaction", bg="#C0C0C0")
 frame_send.pack(fill=tk.X, padx=10, pady=10)
 
-tk.Label(frame_send, text="Sender Pubkey:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Sender Pubkey:", bg="#C0C0C0").grid(row=0, column=0, sticky="e", padx=5, pady=5)
 entry_sender = tk.Entry(frame_send, width=70)
 entry_sender.grid(row=0, column=1, padx=5, pady=5)
 
-tk.Label(frame_send, text="Recipient Pubkey:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Recipient Pubkey:", bg="#C0C0C0").grid(row=1, column=0, sticky="e", padx=5, pady=5)
 entry_recipient = tk.Entry(frame_send, width=70)
 entry_recipient.grid(row=1, column=1, padx=5, pady=5)
 
-tk.Label(frame_send, text="Gift (Nicks):").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Gift (Nicks):", bg="#C0C0C0").grid(row=2, column=0, sticky="e", padx=5, pady=5)
 entry_gift = tk.Entry(frame_send, width=20)
 entry_gift.grid(row=2, column=1, sticky="w", padx=5, pady=5)
 
-tk.Label(frame_send, text="Fee (Nicks):").grid(row=3, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Fee (Nicks):", bg="#C0C0C0").grid(row=3, column=0, sticky="e", padx=5, pady=5)
 entry_fee = tk.Entry(frame_send, width=20)
 entry_fee.grid(row=3, column=1, sticky="w", padx=5, pady=5)
 
@@ -509,11 +511,11 @@ btn_send = tk.Button(frame_send, text="Send Transaction", command=on_send)
 btn_send.grid(row=4, column=0, columnspan=2, pady=10)
 
 # Output text box
-output_text = tk.Text(root, height=20, state='disabled')
+output_text = tk.Text(root, height=20, bg="#F0F0F0", fg="black", state='disabled')
 output_text.pack(fill=tk.BOTH, padx=10, pady=10, expand=True)
 
 # Date/time label
-datetime_label = tk.Label(root, text="")
+datetime_label = tk.Label(root, text="", bg="#C0C0C0")
 datetime_label.pack(side=tk.BOTTOM, pady=5)
 
 update_datetime_label()
