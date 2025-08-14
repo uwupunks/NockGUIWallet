@@ -463,6 +463,66 @@ def open_nocknames_window():
     btn_resolve_address.config(command=on_resolve_address)
     btn_resolve_name.config(command=on_resolve_name)
 
+# --- Signing ---
+
+import re
+
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+def open_sign_message_window():
+    win = Toplevel(root)
+    win.title("Sign Message")
+
+    tk.Label(win, text="Enter message to sign:").pack(pady=10)
+    entry = tk.Entry(win, width=60)
+    entry.pack(pady=5)
+
+    def sign_message():
+        message = entry.get().strip()
+        if not message:
+            messagebox.showerror("Error", "Please enter a message.")
+            return
+
+        output_text.config(state='normal')
+        output_text.delete('1.0', tk.END)
+        output_text.insert(tk.END, f"🖊 Signing message:\n{message}\n\nProcessing...\n")
+        output_text.config(state='disabled')
+
+        q = queue.Queue()
+
+        def run_sign():
+            try:
+                proc = subprocess.Popen(
+                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH,
+                     "sign-message", "-m", message],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                for line in proc.stdout:
+                    clean_line = ANSI_ESCAPE.sub('', line).strip()  # remove ANSI codes
+                    if clean_line:
+                        # Only show important messages
+                        if "error" in clean_line.lower():
+                            q.put(f"⚠️ {clean_line}\n")
+                        elif "signed" in clean_line.lower():
+                            q.put(f"✅ {clean_line}\n")
+                proc.stdout.close()
+                proc.wait()
+            except Exception as e:
+                q.put(f"Error signing message: {e}\n")
+            finally:
+                q.put(None)
+
+        threading.Thread(target=run_sign, daemon=True).start()
+        update_output_text(output_text, q)
+
+        win.destroy()
+
+    tk.Button(win, text="Sign", command=sign_message).pack(pady=10)
+
+
 # --- Main Window ---
 
 root = tk.Tk()
@@ -482,6 +542,9 @@ btn_check_balance.pack(side=tk.LEFT, padx=5)
 
 btn_nocknames = tk.Button(top_frame, text="Nocknames", command=open_nocknames_window, width=15)
 btn_nocknames.pack(side=tk.LEFT, padx=5)
+
+btn_sign_message = tk.Button(top_frame, text="Sign Message", command=open_sign_message_window, width=15)
+btn_sign_message.pack(side=tk.LEFT, padx=5)
 
 # Frame for pubkeys
 frame_pubkeys = tk.Frame(root, bg="#C0C0C0")
