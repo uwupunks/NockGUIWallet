@@ -2,6 +2,7 @@ import os
 import sys
 import tkinter as tk
 from tkinter import messagebox, Toplevel
+from tkinter import filedialog
 import threading
 import subprocess
 import queue
@@ -465,8 +466,6 @@ def open_nocknames_window():
 
 # --- Signing ---
 
-import re
-
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 def open_sign_message_window():
@@ -521,8 +520,109 @@ def open_sign_message_window():
         win.destroy()
 
     tk.Button(win, text="Sign", command=sign_message).pack(pady=10)
+    
+# --- Verify Message ---
 
+# ANSI escape code regex
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
+def open_verify_message_window():
+    win = Toplevel(root)
+    win.title("Verify Message")
+    win.attributes('-topmost', True)  # Window always on top
+
+    tk.Label(win, text="Enter message to verify:").pack(pady=5)
+    message_entry = tk.Entry(win, width=60)
+    message_entry.pack(pady=5)
+
+    folder_frame = tk.Frame(win)
+    folder_frame.pack(pady=5, fill=tk.X, padx=5)
+
+    tk.Label(folder_frame, text="Select folder containing signature file:").pack(side=tk.LEFT)
+    folder_path_var = tk.StringVar()
+    folder_entry = tk.Entry(folder_frame, textvariable=folder_path_var, width=40)
+    folder_entry.pack(side=tk.LEFT, padx=5)
+
+    def browse_folder():
+        folder = filedialog.askdirectory(initialdir=os.path.expanduser("~"))
+        if folder:
+            folder_path_var.set(folder)
+
+    tk.Button(folder_frame, text="Browse", command=browse_folder).pack(side=tk.LEFT)
+
+    tk.Label(win, text="Enter public key (Base58):").pack(pady=5)
+    pubkey_entry = tk.Entry(win, width=60)
+    pubkey_entry.pack(pady=5)
+
+    def verify_message():
+        message = message_entry.get().strip()
+        folder = folder_path_var.get().strip()
+        pubkey = pubkey_entry.get().strip()
+
+        if not message or not folder or not pubkey:
+            messagebox.showerror("Error", "Please enter message, folder, and public key.")
+            return
+
+        sig_file = os.path.join(folder, "message.sig")
+        if not os.path.isfile(sig_file):
+            messagebox.showerror("Error", f"Signature file not found in folder:\n{sig_file}")
+            return
+
+        output_text.config(state='normal')
+        output_text.delete('1.0', tk.END)
+        output_text.insert(tk.END, f"🕵️ Verifying message:\n{message}\n\nProcessing...\n")
+        output_text.config(state='disabled')
+
+        q = queue.Queue()
+
+        def run_verify():
+            try:
+                proc = subprocess.Popen(
+                    [
+                        "nockchain-wallet",
+                        "--nockchain-socket", SOCKET_PATH,
+                        "verify-message",
+                        "-m", message,
+                        "-s", sig_file,
+                        "-p", pubkey
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+
+                for line in proc.stdout:
+                    # Remove ANSI codes
+                    clean_line = ANSI_ESCAPE.sub('', line).strip()
+                    # Skip kernel and nockchain logs
+                    if any(x in clean_line.lower() for x in ["kernel::boot", "nockchain_npc.sock", "nockapp"]):
+                        continue
+
+                    if not clean_line:
+                        continue
+
+                    lower_line = clean_line.lower()
+                    if "invalid signature" in lower_line or "not verified" in lower_line:
+                        q.put(f"❌ {clean_line}\n")
+                    elif "valid signature" in lower_line or "success" in lower_line:
+                        q.put(f"✅ {clean_line}\n")
+
+                proc.stdout.close()
+                proc.wait()
+
+            except Exception as e:
+                # Only show actual verification error
+                q.put(f"⚠️ Error verifying message: {e}\n")
+            finally:
+                q.put(None)
+
+        threading.Thread(target=run_verify, daemon=True).start()
+        update_output_text(output_text, q)
+        win.destroy()
+
+    tk.Button(win, text="Verify", command=verify_message).pack(pady=10)
+    
 # --- Main Window ---
 
 root = tk.Tk()
@@ -545,6 +645,9 @@ btn_nocknames.pack(side=tk.LEFT, padx=5)
 
 btn_sign_message = tk.Button(top_frame, text="Sign Message", command=open_sign_message_window, width=15)
 btn_sign_message.pack(side=tk.LEFT, padx=5)
+
+btn_verify_message = tk.Button(top_frame, text="Verify Message", command=open_verify_message_window, width=15)
+btn_verify_message.pack(side=tk.LEFT, padx=5)
 
 # Frame for pubkeys
 frame_pubkeys = tk.Frame(root, bg="#C0C0C0")
