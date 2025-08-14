@@ -1,8 +1,7 @@
 import os
 import sys
 import tkinter as tk
-from tkinter import messagebox, Toplevel
-from tkinter import filedialog
+from tkinter import Toplevel, messagebox, filedialog
 import threading
 import subprocess
 import queue
@@ -466,6 +465,8 @@ def open_nocknames_window():
 
 # --- Signing ---
 
+import re
+
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 def open_sign_message_window():
@@ -520,8 +521,8 @@ def open_sign_message_window():
         win.destroy()
 
     tk.Button(win, text="Sign", command=sign_message).pack(pady=10)
-    
-# --- Verify Message ---
+
+# --- Verify Message--
 
 # ANSI escape code regex
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
