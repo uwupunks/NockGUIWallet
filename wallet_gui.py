@@ -82,6 +82,7 @@ def truncate_pubkey(pk, front=8, back=8):
 
 # --- Pubkey Fetching & Display ---
 
+
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 def get_pubkeys():
@@ -89,42 +90,62 @@ def get_pubkeys():
         proc = subprocess.Popen(
             ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH, "list-pubkeys"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # merge stderr into stdout
+            stderr=subprocess.STDOUT,
             text=True
         )
 
         pubkeys = []
-        capture_next_line = False
         in_keys_section = False
+        collecting_key = False
+        current_key_lines = []
 
         for raw_line in proc.stdout:
-            clean_line = ANSI_ESCAPE.sub('', raw_line).strip()
+            line = ANSI_ESCAPE.sub('', raw_line).strip()
 
-            # Skip until we reach "Public Keys"
+            # Skip until after "Public Keys"
             if not in_keys_section:
-                if clean_line.lower().startswith("public keys"):
+                if line.lower().startswith("public keys"):
                     in_keys_section = True
                 continue
 
-            # Ignore blank lines
-            if not clean_line:
+            # Ignore separators and blank lines
+            if not line or line.startswith('―'):
                 continue
 
-            # If previous line said "Public Key:" but no value, capture this one
-            if capture_next_line:
-                match = re.search(r"'([^']+)'", clean_line)
-                if match:
-                    pubkeys.append(match.group(1))
-                capture_next_line = False
+            # Start collecting after "- Public Key:"
+            m = re.match(r"^\s*[-–—]\s*Public\s+Key\s*:\s*(.*)$", line, re.IGNORECASE)
+            if m:
+                key_part = m.group(1).strip()
+                if key_part:
+                    # Key is on the same line
+                    pubkeys.append(key_part.strip("'").replace(" ", ""))
+                    collecting_key = False
+                    current_key_lines = []
+                else:
+                    # Key is on next lines
+                    collecting_key = True
+                    current_key_lines = []
                 continue
 
-            # Match public key if it's on the same line
-            match = re.search(r"public\s+key\s*:\s*'([^']+)'", clean_line, re.IGNORECASE)
-            if match:
-                pubkeys.append(match.group(1))
-            elif re.search(r"public\s+key\s*:\s*$", clean_line, re.IGNORECASE):
-                # No value on this line → next line should have the key
-                capture_next_line = True
+            # Stop collecting at chain code
+            if collecting_key and re.match(r"^\s*[-–—]\s*Chain\s+Code\s*:", line, re.IGNORECASE):
+                key = ''.join(current_key_lines).replace(" ", "")
+                if key:
+                    pubkeys.append(key)
+                collecting_key = False
+                current_key_lines = []
+                continue
+
+            # Collect key fragments if we are in a key
+            if collecting_key:
+                if line:
+                    current_key_lines.append(line.strip("'").strip())
+
+        # Add last key if still collecting
+        if collecting_key and current_key_lines:
+            key = ''.join(current_key_lines).replace(" ", "")
+            if key:
+                pubkeys.append(key)
 
         proc.wait()
         return pubkeys
