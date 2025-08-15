@@ -650,11 +650,44 @@ def open_verify_message_window():
 
     tk.Button(win, text="Verify", command=verify_message).pack(pady=10)
     
+    
+# --- Coinpaprika API ---
+# CoinPaprika API endpoint for Nockchain
+API_URL = "https://api.coinpaprika.com/v1/tickers/nock-nockchain"
+
+def get_price():
+    """Fetch NOCK price from CoinPaprika"""
+    try:
+        response = requests.get(API_URL, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        price = data["quotes"]["USD"]["price"]
+        change_24h = data["quotes"]["USD"]["percent_change_24h"]
+        return price, change_24h
+    except Exception as e:
+        return None, None
+
+def update_price():
+    """Update the label with the latest price"""
+    price, change_24h = get_price()
+    if price is not None:
+        price_label.config(text=f"Price: ${price:.6f}")
+        change_label.config(text=f"24h Change: {change_24h:.2f}%")
+        
+        # Color for change
+        if change_24h >= 0:
+            change_label.config(fg="green")
+        else:
+            change_label.config(fg="red")
+    else:
+        price_label.config(text="Error fetching data")
+        change_label.config(text="")
+
 # --- Main Window ---
 
 root = tk.Tk()
 root.title("Robinhood's Nockchain GUI Wallet")
-root.geometry("900x700")
+root.geometry("1200x900")
 root.configure(bg="#C0C0C0")
 
 # Top frame for buttons
@@ -712,5 +745,15 @@ datetime_label = tk.Label(root, text="", bg="#C0C0C0")
 datetime_label.pack(side=tk.BOTTOM, pady=5)
 
 update_datetime_label()
+
+price_label = tk.Label(root, text="Loading...", font=("Arial", 12), bg="#c0c0c0")
+price_label.pack()
+
+change_label = tk.Label(root, text="", font=("Arial", 12), bg="#c0c0c0")
+change_label.pack()
+
+# Initial update
+update_price()
+
 
 root.mainloop()  
