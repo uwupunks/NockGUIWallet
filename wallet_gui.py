@@ -82,36 +82,57 @@ def truncate_pubkey(pk, front=8, back=8):
 
 # --- Pubkey Fetching & Display ---
 
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 def get_pubkeys():
     try:
         proc = subprocess.Popen(
             ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH, "list-pubkeys"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # merge stderr into stdout
             text=True
         )
 
         pubkeys = []
+        capture_next_line = False
+        in_keys_section = False
 
-        for line in proc.stdout:
-            line = line.strip()
-            match = re.match(r"- Public Key: '([^']+)'", line)
+        for raw_line in proc.stdout:
+            clean_line = ANSI_ESCAPE.sub('', raw_line).strip()
+
+            # Skip until we reach "Public Keys"
+            if not in_keys_section:
+                if clean_line.lower().startswith("public keys"):
+                    in_keys_section = True
+                continue
+
+            # Ignore blank lines
+            if not clean_line:
+                continue
+
+            # If previous line said "Public Key:" but no value, capture this one
+            if capture_next_line:
+                match = re.search(r"'([^']+)'", clean_line)
+                if match:
+                    pubkeys.append(match.group(1))
+                capture_next_line = False
+                continue
+
+            # Match public key if it's on the same line
+            match = re.search(r"public\s+key\s*:\s*'([^']+)'", clean_line, re.IGNORECASE)
             if match:
                 pubkeys.append(match.group(1))
+            elif re.search(r"public\s+key\s*:\s*$", clean_line, re.IGNORECASE):
+                # No value on this line → next line should have the key
+                capture_next_line = True
 
-        stderr_output = proc.stderr.read()
         proc.wait()
-
-        if proc.returncode != 0:
-            messagebox.showerror("Error", f"Failed to get pubkeys:\n{stderr_output}")
-            return []
-
         return pubkeys
 
     except Exception as e:
-        messagebox.showerror("Error", f"Unexpected error:\n{e}")
+        print(f"Error while getting pubkeys: {e}")
         return []
-
+        
 def copy_to_clipboard(pubkey):
     root.clipboard_clear()
     root.clipboard_append(pubkey)
