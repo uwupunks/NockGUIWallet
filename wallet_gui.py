@@ -88,45 +88,29 @@ def get_pubkeys():
             ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH, "list-pubkeys"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
+            text=True
         )
 
         pubkeys = []
-        collecting = False
-        current_key_lines = []
 
         for line in proc.stdout:
             line = line.strip()
+            match = re.match(r"- Public Key: '([^']+)'", line)
+            if match:
+                pubkeys.append(match.group(1))
 
-            if line == "- Public Key:":
-                collecting = True
-                current_key_lines = []
-                continue
-
-            if collecting:
-                # Collect lines until we find a line ending with a single quote '
-                current_key_lines.append(line)
-                if line.endswith("'"):
-                    # join lines, remove surrounding quotes and whitespace
-                    full_key = "".join(current_key_lines)
-                    full_key = full_key.strip("'").replace("\n", "")
-                    pubkeys.append(full_key)
-                    collecting = False
-
-        proc.stdout.close()
+        stderr_output = proc.stderr.read()
         proc.wait()
+
+        if proc.returncode != 0:
+            messagebox.showerror("Error", f"Failed to get pubkeys:\n{stderr_output}")
+            return []
 
         return pubkeys
 
-    except subprocess.CalledProcessError as e:
-        messagebox.showerror("Error", f"Failed to get pubkeys:\n{e.stderr}")
-        return []
     except Exception as e:
         messagebox.showerror("Error", f"Unexpected error:\n{e}")
         return []
-
-
 
 def copy_to_clipboard(pubkey):
     root.clipboard_clear()
