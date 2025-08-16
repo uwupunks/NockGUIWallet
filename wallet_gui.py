@@ -81,7 +81,7 @@ def truncate_pubkey(pk, front=8, back=8):
     return f"{pk[:front]}...{pk[-back:]}"
 
 # --- Pubkey Fetching & Display ---
-
+open_windows = []
 
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
@@ -178,81 +178,123 @@ def display_pubkeys(pubkeys):
             btn_copy = tk.Button(row, text="Copy", width=5, command=lambda pk=pubkey: copy_to_clipboard(pk))
             btn_copy.pack(side=tk.RIGHT)
 
-# --- Check Balance Window ---
+# --- Date/Time Footer ---
 
-def open_check_balance_window():
-    def on_check():
-        pubkey = entry_pubkey.get().strip()
-        if not pubkey:
-            messagebox.showerror("Input error", "Please enter a pubkey.")
-            return
-        if not re.fullmatch(r"[A-Za-z0-9]+", pubkey):
-            messagebox.showerror("Input error", "❌ Invalid pubkey format. Only alphanumeric characters allowed.")
-            return
+def update_datetime_label():
+    now = datetime.datetime.now()
+    formatted = now.strftime("%b %d %H:%M")
+    datetime_label.config(text=formatted)
+    root.after(1000, update_datetime_label)  
+    
+# --- Coinpaprika API ---
+# CoinPaprika API endpoint for Nockchain
+API_URL = "https://api.coinpaprika.com/v1/tickers/nock-nockchain"
 
-        output_text.config(state='normal')
-        output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"🔍 Checking balance for:\n{pubkey}\n\nLoading...\n")
-        output_text.config(state='disabled')
+def get_price():
+    """Fetch NOCK price from CoinPaprika"""
+    try:
+        response = requests.get(API_URL, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        price = data["quotes"]["USD"]["price"]
+        change_24h = data["quotes"]["USD"]["percent_change_24h"]
+        return price, change_24h
+    except Exception as e:
+        return None, None
 
-        q = queue.Queue()
+def update_price():
+    """Update the label with the latest price"""
+    price, change_24h = get_price()
+    if price is not None:
+        price_label.config(text=f"Price: ${price:.6f}")
+        change_label.config(text=f"24h Change: {change_24h:.2f}%")
+        
+        # Color for change
+        if change_24h >= 0:
+            change_label.config(fg="green")
+        else:
+            change_label.config(fg="red")
+    else:
+        price_label.config(text="Error fetching data")
+        change_label.config(text="")
+        
+# ---------------- THEMES ----------------
+current_theme = "light"
 
-        def run_check_balance():
+themes = {
+    "light": {
+        "bg": "#ECECEC",
+        "fg": "#1A1A1A",
+        "button_bg": "#F5F5F5",
+        "button_fg": "#1A1A1A",
+        "button_active_bg": "#E0E0E0",
+        "button_active_fg": "#1A1A1A",
+        "entry_bg": "#FFFFFF",
+        "entry_fg": "#1A1A1A",  
+    },
+    "dark": {
+        "bg": "#1F1F1F",
+        "fg": "#c0c0c0",
+        "button_bg": "#2E2E2E",
+        "button_fg": "#E0E0E0",
+        "button_active_bg": "#3C3C3C",
+        "button_active_fg": "#FFFFFF",
+        "entry_bg": "#3C3C3C",
+        "entry_fg": "#c0c0c0",
+    }
+}
+
+def toggle_theme():
+    global current_theme
+    current_theme = "dark" if current_theme == "light" else "light"
+    btn_toggle_theme.config(text="🌞" if current_theme == "dark" else "🌙")
+    apply_theme(root)
+
+ 
+def apply_theme(widget):
+    t = themes[current_theme]
+
+    def safe_config(w, **kwargs):
+        for k, v in kwargs.items():
             try:
-                proc = subprocess.Popen(
-                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH,
-                     "list-notes-by-pubkey", pubkey],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1
-                )
-                total_assets = 0
-                required_sigs_list = []
+                w.configure(**{k: v})
+            except tk.TclError:
+                pass
 
-                for line in proc.stdout:
-                    m_asset = re.search(r"- Assets:\s*(\d+)", line)
-                    if m_asset:
-                        total_assets += int(m_asset.group(1))
+    if isinstance(widget, (tk.Tk, tk.Toplevel, tk.Frame, tk.LabelFrame, tk.PanedWindow)):
+        safe_config(widget, bg=t["bg"])
+    elif isinstance(widget, tk.Label):
+        safe_config(widget, bg=t["bg"], fg=t["fg"])
+    elif isinstance(widget, tk.Button):
+        safe_config(
+            widget,
+            bg=t["button_bg"],
+            fg=t["button_fg"],
+            activebackground=t["button_active_bg"],
+            activeforeground=t["button_active_fg"],
+        )
+    elif isinstance(widget, (tk.Entry, tk.Text)):
+        safe_config(widget, bg=t["entry_bg"], fg=t["entry_fg"], insertbackground=t["entry_fg"])
 
-                    m_sig = re.search(r"- Required Signatures:\s*(\d+)", line)
-                    if m_sig:
-                        required_sigs_list.append(int(m_sig.group(1)))
+    if hasattr(widget, "winfo_children"):
+        for child in widget.winfo_children():
+            apply_theme(child)
 
-                proc.stdout.close()
-                proc.wait()
+def create_themed_window(title="Window", size="400x300"):
+    win = tk.Toplevel(root)
+    win.title(title)
+    win.geometry(size)
+    
+    # Apply current theme immediately
+    apply_theme(win)
+    
+    return win
+       
+# --- Main Window ---
 
-                nocks = total_assets / 65536
-
-                if not required_sigs_list:
-                    status_msg = "ℹ️ No 'Required Signatures' info found in notes.\n"
-                elif all(m == 1 for m in required_sigs_list):
-                    status_msg = "✅ Coins are Spendable! All required signatures = 1\n"
-                else:
-                    status_msg = "❌❌❌❌ Some Coins are Unspendable! Required signatures > 1 detected ❌❌❌❌\n"
-
-                output = f"Total Assets: {total_assets} Nicks (~{nocks:.2f} Nocks)\n{status_msg}"
-
-                q.put(output)
-            except Exception as e:
-                q.put(f"Error checking balance: {e}\n")
-            finally:
-                q.put(None)
-
-        threading.Thread(target=run_check_balance, daemon=True).start()
-        update_output_text(output_text, q)
-
-        win.destroy()
-
-    win = Toplevel(root)
-    win.title("Check Balance")
-
-    tk.Label(win, text="Enter pubkey:").pack(padx=10, pady=5)
-    entry_pubkey = tk.Entry(win, width=80)
-    entry_pubkey.pack(padx=10, pady=5)
-
-    btn_check = tk.Button(win, text="Check Balance", command=on_check)
-    btn_check.pack(pady=10)
+root = tk.Tk()
+root.title("Robinhood's Nockchain GUI Wallet")
+root.geometry("1200x900")
 
 # --- Event Handlers ---
 
@@ -329,15 +371,7 @@ def on_send():
     def reenable_btn():
         btn_send.config(state='normal')
     root.after(10000, reenable_btn)
-
-# --- Date/Time Footer ---
-
-def update_datetime_label():
-    now = datetime.datetime.now()
-    formatted = now.strftime("%b %d %H:%M")
-    datetime_label.config(text=formatted)
-    root.after(1000, update_datetime_label)
-
+    
 # --- Nocknames API Calls ---
 
 def resolve_nockname(address):
@@ -375,10 +409,8 @@ def resolve_nockaddress(name):
 # --- Nocknames Window ---
 
 def open_nocknames_window():
-    win = Toplevel(root)
-    win.title("Nocknames")
-    win.geometry("900x700")
-    win.configure(bg="#C0C0C0")
+    win = create_themed_window("Nocknames", "900x600")  # Themed window
+    open_windows.append(win)  # track this window
 
     # Register New button
     def open_register():
@@ -389,14 +421,14 @@ def open_nocknames_window():
     btn_register.pack(pady=15)
 
     # Separator line
-    sep = tk.Frame(win, height=2, bd=1, relief=tk.SUNKEN, bg="black")
+    sep = tk.Frame(win, height=2, bd=1, relief=tk.SUNKEN)
     sep.pack(fill=tk.X, padx=5, pady=5)
 
     # Resolve Address Section
-    frame_resolve_address = tk.LabelFrame(win, text="Resolve Name from Address", bg="#C0C0C0")
+    frame_resolve_address = tk.LabelFrame(win, text="Resolve Name from Address")
     frame_resolve_address.pack(fill=tk.X, padx=20, pady=10)
 
-    lbl_address = tk.Label(frame_resolve_address, text="Address:", bg="#C0C0C0")
+    lbl_address = tk.Label(frame_resolve_address, text="Address:")
     lbl_address.grid(row=0, column=0, sticky="w", padx=5, pady=5)
     entry_address = tk.Entry(frame_resolve_address, width=60)
     entry_address.grid(row=0, column=1, padx=5, pady=5)
@@ -404,17 +436,17 @@ def open_nocknames_window():
     btn_resolve_address = tk.Button(frame_resolve_address, text="Resolve", width=12)
     btn_resolve_address.grid(row=0, column=2, padx=5, pady=5)
 
-    txt_resolved_name = tk.Text(frame_resolve_address, height=3, width=60, state='disabled', bg="#F0F0F0")
+    txt_resolved_name = tk.Text(frame_resolve_address, height=3, width=60, state='disabled')
     txt_resolved_name.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
 
     btn_copy_name = tk.Button(frame_resolve_address, text="Copy", width=10)
     btn_copy_name.grid(row=2, column=2, padx=5, pady=5, sticky="e")
 
     # Resolve Name Section
-    frame_resolve_name = tk.LabelFrame(win, text="Resolve Address from Name", bg="#C0C0C0")
+    frame_resolve_name = tk.LabelFrame(win, text="Resolve Address from Name")
     frame_resolve_name.pack(fill=tk.X, padx=20, pady=10)
 
-    lbl_name = tk.Label(frame_resolve_name, text="Name:", bg="#C0C0C0")
+    lbl_name = tk.Label(frame_resolve_name, text="Name:")
     lbl_name.grid(row=0, column=0, sticky="w", padx=5, pady=5)
     entry_name = tk.Entry(frame_resolve_name, width=60)
     entry_name.grid(row=0, column=1, padx=5, pady=5)
@@ -422,7 +454,7 @@ def open_nocknames_window():
     btn_resolve_name = tk.Button(frame_resolve_name, text="Resolve", width=12)
     btn_resolve_name.grid(row=0, column=2, padx=5, pady=5)
 
-    txt_resolved_address = tk.Text(frame_resolve_name, height=3, width=60, state='disabled', bg="#F0F0F0")
+    txt_resolved_address = tk.Text(frame_resolve_name, height=3, width=60, state='disabled')
     txt_resolved_address.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
 
     btn_copy_address = tk.Button(frame_resolve_name, text="Copy", width=10)
@@ -489,15 +521,87 @@ def open_nocknames_window():
     btn_resolve_address.config(command=on_resolve_address)
     btn_resolve_name.config(command=on_resolve_name)
 
-# --- Signing ---
+    
+# --- Check Balance Window ---
+def open_check_balance_window():
+    win = create_themed_window("Check Balance", "900x200")  # only one Toplevel
+    
+    tk.Label(win, text="Enter pubkey:").pack(padx=10, pady=5)
+    entry_pubkey = tk.Entry(win, width=80)
+    entry_pubkey.pack(padx=10, pady=5)
 
-import re
+    def on_check():
+        pubkey = entry_pubkey.get().strip()
+        if not pubkey:
+            messagebox.showerror("Input error", "Please enter a pubkey.")
+            return
+        if not re.fullmatch(r"[A-Za-z0-9]+", pubkey):
+            messagebox.showerror("Input error", "❌ Invalid pubkey format. Only alphanumeric characters allowed.")
+            return
+
+        output_text.config(state='normal')
+        output_text.delete('1.0', tk.END)
+        output_text.insert(tk.END, f"🔍 Checking balance for:\n{pubkey}\n\nLoading...\n")
+        output_text.config(state='disabled')
+
+        q = queue.Queue()
+
+        def run_check_balance():
+            try:
+                proc = subprocess.Popen(
+                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH,
+                     "list-notes-by-pubkey", pubkey],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                total_assets = 0
+                required_sigs_list = []
+
+                for line in proc.stdout:
+                    m_asset = re.search(r"- Assets:\s*(\d+)", line)
+                    if m_asset:
+                        total_assets += int(m_asset.group(1))
+
+                    m_sig = re.search(r"- Required Signatures:\s*(\d+)", line)
+                    if m_sig:
+                        required_sigs_list.append(int(m_sig.group(1)))
+
+                proc.stdout.close()
+                proc.wait()
+
+                nocks = total_assets / 65536
+
+                if not required_sigs_list:
+                    status_msg = "ℹ️ No 'Required Signatures' info found in notes.\n"
+                elif all(m == 1 for m in required_sigs_list):
+                    status_msg = "✅ Coins are Spendable! All required signatures = 1\n"
+                else:
+                    status_msg = "❌❌❌❌ Some Coins are Unspendable! Required signatures > 1 detected ❌❌❌❌\n"
+
+                output = f"Total Assets: {total_assets} Nicks (~{nocks:.2f} Nocks)\n{status_msg}"
+
+                q.put(output)
+            except Exception as e:
+                q.put(f"Error checking balance: {e}\n")
+            finally:
+                q.put(None)
+
+        threading.Thread(target=run_check_balance, daemon=True).start()
+        update_output_text(output_text, q)
+
+        win.destroy()
+
+    btn_check = tk.Button(win, text="Check Balance", command=on_check)
+    btn_check.pack(pady=10)
+
+# --- Signing ---
 
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 def open_sign_message_window():
-    win = Toplevel(root)
-    win.title("Sign Message")
+    win = create_themed_window("Sign Message","900x200")  # Themed window
 
     tk.Label(win, text="Enter message to sign:").pack(pady=10)
     entry = tk.Entry(win, width=60)
@@ -548,15 +652,15 @@ def open_sign_message_window():
 
     tk.Button(win, text="Sign", command=sign_message).pack(pady=10)
 
-# --- Verify Message--
+
+# --- Verify Message ---
 
 # ANSI escape code regex
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 def open_verify_message_window():
-    win = Toplevel(root)
-    win.title("Verify Message")
-    win.attributes('-topmost', True)  # Window always on top
+    win = create_themed_window("Verify Message", "900x300")  # Themed window
+    win.attributes('-topmost', True)  # Always on top
 
     tk.Label(win, text="Enter message to verify:").pack(pady=5)
     message_entry = tk.Entry(win, width=60)
@@ -620,12 +724,9 @@ def open_verify_message_window():
                 )
 
                 for line in proc.stdout:
-                    # Remove ANSI codes
                     clean_line = ANSI_ESCAPE.sub('', line).strip()
-                    # Skip kernel and nockchain logs
                     if any(x in clean_line.lower() for x in ["kernel::boot", "nockchain_npc.sock", "nockapp"]):
                         continue
-
                     if not clean_line:
                         continue
 
@@ -639,7 +740,6 @@ def open_verify_message_window():
                 proc.wait()
 
             except Exception as e:
-                # Only show actual verification error
                 q.put(f"⚠️ Error verifying message: {e}\n")
             finally:
                 q.put(None)
@@ -649,49 +749,10 @@ def open_verify_message_window():
         win.destroy()
 
     tk.Button(win, text="Verify", command=verify_message).pack(pady=10)
-    
-    
-# --- Coinpaprika API ---
-# CoinPaprika API endpoint for Nockchain
-API_URL = "https://api.coinpaprika.com/v1/tickers/nock-nockchain"
 
-def get_price():
-    """Fetch NOCK price from CoinPaprika"""
-    try:
-        response = requests.get(API_URL, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        price = data["quotes"]["USD"]["price"]
-        change_24h = data["quotes"]["USD"]["percent_change_24h"]
-        return price, change_24h
-    except Exception as e:
-        return None, None
-
-def update_price():
-    """Update the label with the latest price"""
-    price, change_24h = get_price()
-    if price is not None:
-        price_label.config(text=f"Price: ${price:.6f}")
-        change_label.config(text=f"24h Change: {change_24h:.2f}%")
-        
-        # Color for change
-        if change_24h >= 0:
-            change_label.config(fg="green")
-        else:
-            change_label.config(fg="red")
-    else:
-        price_label.config(text="Error fetching data")
-        change_label.config(text="")
-
-# --- Main Window ---
-
-root = tk.Tk()
-root.title("Robinhood's Nockchain GUI Wallet")
-root.geometry("1200x900")
-root.configure(bg="#C0C0C0")
 
 # Top frame for buttons
-top_frame = tk.Frame(root, bg="#C0C0C0")
+top_frame = tk.Frame(root)
 top_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
 
 btn_get_pubkeys = tk.Button(top_frame, text="Get Pubkeys", command=on_get_pubkeys, width=15)
@@ -709,27 +770,31 @@ btn_sign_message.pack(side=tk.LEFT, padx=5)
 btn_verify_message = tk.Button(top_frame, text="Verify Message", command=open_verify_message_window, width=15)
 btn_verify_message.pack(side=tk.LEFT, padx=5)
 
+# Theme toggle button
+btn_toggle_theme = tk.Button(top_frame, text="🌙", command=toggle_theme, width=1)
+btn_toggle_theme.pack(side=tk.LEFT, padx=5)
+
 # Frame for pubkeys
-frame_pubkeys = tk.Frame(root, bg="#C0C0C0")
+frame_pubkeys = tk.Frame(root)
 frame_pubkeys.pack(fill=tk.X, padx=10, pady=5)
 
 # Send transaction frame
-frame_send = tk.LabelFrame(root, text="Send Transaction", bg="#C0C0C0")
+frame_send = tk.LabelFrame(root, text="Send Transaction", fg="#636363")
 frame_send.pack(fill=tk.X, padx=10, pady=10)
 
-tk.Label(frame_send, text="Sender Pubkey:", bg="#C0C0C0").grid(row=0, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Sender Pubkey:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
 entry_sender = tk.Entry(frame_send, width=70)
 entry_sender.grid(row=0, column=1, padx=5, pady=5)
 
-tk.Label(frame_send, text="Recipient Pubkey:", bg="#C0C0C0").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Recipient Pubkey:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
 entry_recipient = tk.Entry(frame_send, width=70)
 entry_recipient.grid(row=1, column=1, padx=5, pady=5)
 
-tk.Label(frame_send, text="Gift (Nicks):", bg="#C0C0C0").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Gift (Nicks):").grid(row=2, column=0, sticky="e", padx=5, pady=5)
 entry_gift = tk.Entry(frame_send, width=20)
 entry_gift.grid(row=2, column=1, sticky="w", padx=5, pady=5)
 
-tk.Label(frame_send, text="Fee (Nicks):", bg="#C0C0C0").grid(row=3, column=0, sticky="e", padx=5, pady=5)
+tk.Label(frame_send, text="Fee (Nicks):").grid(row=3, column=0, sticky="e", padx=5, pady=5)
 entry_fee = tk.Entry(frame_send, width=20)
 entry_fee.grid(row=3, column=1, sticky="w", padx=5, pady=5)
 
@@ -755,5 +820,7 @@ change_label.pack()
 # Initial update
 update_price()
 
+# Apply theme to root
+apply_theme(root)
 
 root.mainloop()  
