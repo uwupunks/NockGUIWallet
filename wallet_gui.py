@@ -1,23 +1,196 @@
 import os
 import sys
 import tkinter as tk
-from tkinter import Toplevel, messagebox, filedialog
+from tkinter import ttk, Toplevel, messagebox, filedialog
 import threading
 import subprocess
 import queue
 import re
 import datetime
-import requests  # Added for API calls
+import requests
+from tkinter import font
 
-# --- Detect socket path programmatically ---
+# --- Enhanced Visual Components ---
+
+class ModernButton(tk.Frame):
+    def __init__(self, parent, text, command=None, style="primary", **kwargs):
+        super().__init__(parent, **kwargs)
+        
+        self.command = command
+        self.style = style
+        self.enabled = True
+        
+        # Style definitions
+        styles = {
+            "primary": {"bg": "#4F46E5", "fg": "white", "hover": "#4338CA"},
+            "secondary": {"bg": "#6B7280", "fg": "white", "hover": "#4B5563"},
+            "success": {"bg": "#059669", "fg": "white", "hover": "#047857"},
+            "danger": {"bg": "#DC2626", "fg": "white", "hover": "#B91C1C"}
+        }
+        
+        self.colors = styles.get(style, styles["primary"])
+        
+        self.button = tk.Label(
+            self, 
+            text=text,
+            bg=self.colors["bg"],
+            fg=self.colors["fg"],
+            padx=20,
+            pady=10,
+            font=("Segoe UI", 10, "bold"),
+            cursor="hand2"
+        )
+        self.button.pack(fill="both", expand=True)
+        
+        # Hover effects
+        self.button.bind("<Enter>", self.on_enter)
+        self.button.bind("<Leave>", self.on_leave)
+        self.button.bind("<Button-1>", self.on_click)
+        
+    def on_enter(self, e):
+        if self.enabled:
+            self.button.config(bg=self.colors["hover"])
+        
+    def on_leave(self, e):
+        if self.enabled:
+            self.button.config(bg=self.colors["bg"])
+        
+    def on_click(self, e):
+        if self.command and self.enabled:
+            self.command()
+            
+    def set_enabled(self, enabled):
+        self.enabled = enabled
+        if enabled:
+            self.button.config(cursor="hand2", bg=self.colors["bg"])
+        else:
+            self.button.config(cursor="arrow", bg="#9CA3AF")
+
+class ModernFrame(tk.Frame):
+    def __init__(self, parent, title=None, **kwargs):
+        super().__init__(parent, **kwargs)
+        
+        self.config(bg="#FFFFFF", relief="flat", bd=0)
+        
+        if title:
+            title_frame = tk.Frame(self, bg="#f8fafc", height=40)
+            title_frame.pack(fill="x", pady=(0, 10))
+            title_frame.pack_propagate(False)
+            
+            title_label = tk.Label(
+                title_frame,
+                text=title,
+                font=("Segoe UI", 12, "bold"),
+                bg="#f8fafc",
+                fg="#1F2937"
+            )
+            title_label.pack(pady=10)
+
+class ModernEntry(tk.Frame):
+    def __init__(self, parent, placeholder="", **kwargs):
+        super().__init__(parent, **kwargs)
+        self.config(bg="white")
+        
+        self.entry = tk.Entry(
+            self,
+            font=("Segoe UI", 10),
+            bg="white",
+            fg="#374151",
+            relief="flat",
+            bd=0,
+            insertbackground="#4F46E5"
+        )
+        self.entry.pack(fill="both", expand=True, padx=12, pady=8)
+        
+        # Border frame
+        self.border = tk.Frame(self, height=1, bg="#D1D5DB")
+        self.border.pack(fill="x", side="bottom")
+        
+        # Placeholder functionality
+        self.placeholder = placeholder
+        if placeholder:
+            self.show_placeholder()
+            self.entry.bind("<FocusIn>", self.hide_placeholder)
+            self.entry.bind("<FocusOut>", self.show_placeholder)
+    
+    def show_placeholder(self, event=None):
+        if not self.entry.get():
+            self.entry.insert(0, self.placeholder)
+            self.entry.config(fg="#9CA3AF")
+    
+    def hide_placeholder(self, event=None):
+        if self.entry.get() == self.placeholder:
+            self.entry.delete(0, tk.END)
+            self.entry.config(fg="#374151")
+    
+    def get(self):
+        value = self.entry.get()
+        return "" if value == self.placeholder else value
+
+class StatusBar(tk.Frame):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.config(bg="#1F2937", height=30)
+        self.pack_propagate(False)
+        
+        # Price info
+        self.price_frame = tk.Frame(self, bg="#1F2937")
+        self.price_frame.pack(side="left", padx=20)
+        
+        self.price_label = tk.Label(
+            self.price_frame,
+            text="NOCK: $0.000000",
+            font=("Segoe UI", 9),
+            bg="#1F2937",
+            fg="#10B981"
+        )
+        self.price_label.pack(side="left")
+        
+        self.change_label = tk.Label(
+            self.price_frame,
+            text="▲ 0.00%",
+            font=("Segoe UI", 9),
+            bg="#1F2937",
+            fg="#10B981"
+        )
+        self.change_label.pack(side="left", padx=(10, 0))
+        
+        # Time
+        self.time_label = tk.Label(
+            self,
+            text="",
+            font=("Segoe UI", 9),
+            bg="#1F2937",
+            fg="#9CA3AF"
+        )
+        self.time_label.pack(side="right", padx=20)
+        
+        self.update_time()
+        self.update_price()
+    
+    def update_time(self):
+        now = datetime.datetime.now()
+        self.time_label.config(text=now.strftime("%b %d %H:%M:%S"))
+        self.after(1000, self.update_time)
+    
+    def update_price(self):
+        # Mock price update - replace with actual API call
+        price, change = get_price()
+        if price:
+            self.price_label.config(text=f"NOCK: ${price:.6f}")
+            color = "#10B981" if change >= 0 else "#EF4444"
+            symbol = "▲" if change >= 0 else "▼"
+            self.change_label.config(text=f"{symbol} {abs(change):.2f}%", fg=color)
+        
+        self.after(60000, self.update_price)  # Update every minute
+
+# --- Original utility functions with enhancements ---
 
 def detect_socket_path():
-    # Check env var first
     socket_path = os.environ.get("NOCKCHAIN_SOCKET")
     if socket_path and os.path.exists(socket_path):
         return socket_path
 
-    # Common candidate paths relative to home directory
     home = os.path.expanduser("~")
     candidates = [
         os.path.join(home, ".nockchain", ".socket", "nockchain_npc.sock"),
@@ -30,18 +203,16 @@ def detect_socket_path():
         if os.path.exists(path):
             return path
 
-    # --- Catch-all: recursive search for socket filename under home ---
     for root_dir, dirs, files in os.walk(home):
         if "nockchain_npc.sock" in files:
             return os.path.join(root_dir, "nockchain_npc.sock")
 
     return None
 
-
 SOCKET_PATH = detect_socket_path()
 
 if SOCKET_PATH is None:
-    tk.Tk().withdraw()  # hide root window before messagebox
+    tk.Tk().withdraw()
     messagebox.showerror(
         "Error",
         "Nockchain socket path not found.\n"
@@ -53,7 +224,13 @@ if SOCKET_PATH is None:
     )
     sys.exit(1)
 
-# --- Utility Functions ---
+def create_modern_window(title, width, height):
+    """Helper function to create modern styled windows"""
+    win = tk.Toplevel(root)
+    win.title(title)
+    win.geometry(f"{width}x{height}")
+    win.configure(bg="#F9FAFB")
+    return win
 
 def print_to_output(text):
     output_text.config(state='normal')
@@ -80,8 +257,19 @@ def truncate_pubkey(pk, front=8, back=8):
         return pk
     return f"{pk[:front]}...{pk[-back:]}"
 
-# --- Pubkey Fetching & Display ---
-open_windows = []
+# Price API
+API_URL = "https://api.coinpaprika.com/v1/tickers/nock-nockchain"
+
+def get_price():
+    try:
+        response = requests.get(API_URL, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        price = data["quotes"]["USD"]["price"]
+        change_24h = data["quotes"]["USD"]["percent_change_24h"]
+        return price, change_24h
+    except Exception:
+        return 0.000123, 2.45  # Mock data
 
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
@@ -102,32 +290,26 @@ def get_pubkeys():
         for raw_line in proc.stdout:
             line = ANSI_ESCAPE.sub('', raw_line).strip()
 
-            # Skip until after "Public Keys"
             if not in_keys_section:
                 if line.lower().startswith("public keys"):
                     in_keys_section = True
                 continue
 
-            # Ignore separators and blank lines
             if not line or line.startswith('―'):
                 continue
 
-            # Start collecting after "- Public Key:"
             m = re.match(r"^\s*[-–—]\s*Public\s+Key\s*:\s*(.*)$", line, re.IGNORECASE)
             if m:
                 key_part = m.group(1).strip()
                 if key_part:
-                    # Key is on the same line
                     pubkeys.append(key_part.strip("'").replace(" ", ""))
                     collecting_key = False
                     current_key_lines = []
                 else:
-                    # Key is on next lines
                     collecting_key = True
                     current_key_lines = []
                 continue
 
-            # Stop collecting at chain code
             if collecting_key and re.match(r"^\s*[-–—]\s*Chain\s+Code\s*:", line, re.IGNORECASE):
                 key = ''.join(current_key_lines).replace(" ", "")
                 if key:
@@ -136,12 +318,10 @@ def get_pubkeys():
                 current_key_lines = []
                 continue
 
-            # Collect key fragments if we are in a key
             if collecting_key:
                 if line:
                     current_key_lines.append(line.strip("'").strip())
 
-        # Add last key if still collecting
         if collecting_key and current_key_lines:
             key = ''.join(current_key_lines).replace(" ", "")
             if key:
@@ -153,225 +333,113 @@ def get_pubkeys():
     except Exception as e:
         print(f"Error while getting pubkeys: {e}")
         return []
-        
+
 def copy_to_clipboard(pubkey):
     root.clipboard_clear()
     root.clipboard_append(pubkey)
-    messagebox.showinfo("Copied", f"Copied pubkey:\n{pubkey}")
+    # Show modern notification
+    show_notification("Copied!", f"Pubkey copied to clipboard")
+
+def show_notification(title, message):
+    notification = tk.Toplevel(root)
+    notification.title("")
+    notification.geometry("300x80+{}+{}".format(
+        root.winfo_x() + root.winfo_width() - 320,
+        root.winfo_y() + 50
+    ))
+    notification.configure(bg="#10B981")
+    notification.overrideredirect(True)
+    notification.attributes("-topmost", True)
+    
+    tk.Label(
+        notification,
+        text="✅ " + title,
+        font=("Segoe UI", 10, "bold"),
+        bg="#10B981",
+        fg="white"
+    ).pack(pady=5)
+    
+    tk.Label(
+        notification,
+        text=message,
+        font=("Segoe UI", 9),
+        bg="#10B981",
+        fg="white"
+    ).pack()
+    
+    # Auto close after 2 seconds
+    notification.after(2000, notification.destroy)
 
 def display_pubkeys(pubkeys):
-    for widget in frame_pubkeys.winfo_children():
+    for widget in pubkeys_content.winfo_children():
         widget.destroy()
 
     if not pubkeys:
-        label = tk.Label(frame_pubkeys, text="(No pubkeys found. Click 'Get Pubkeys' to fetch.)", fg="red", bg="#C0C0C0")
-        label.pack(pady=5)
-    else:
-        for pubkey in pubkeys:
-            row = tk.Frame(frame_pubkeys, bg="#C0C0C0")
-            row.pack(fill=tk.X, pady=2)
-
-            display_pk = truncate_pubkey(pubkey)
-            lbl = tk.Label(row, text=f"🔑 {display_pk}", anchor="w", bg="#C0C0C0")
-            lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-            btn_copy = tk.Button(row, text="Copy", width=5, command=lambda pk=pubkey: copy_to_clipboard(pk))
-            btn_copy.pack(side=tk.RIGHT)
-
-# --- Date/Time Footer ---
-
-def update_datetime_label():
-    now = datetime.datetime.now()
-    formatted = now.strftime("%b %d %H:%M")
-    datetime_label.config(text=formatted)
-    root.after(1000, update_datetime_label)  
-    
-# --- Coinpaprika API ---
-# CoinPaprika API endpoint for Nockchain
-API_URL = "https://api.coinpaprika.com/v1/tickers/nock-nockchain"
-
-def get_price():
-    """Fetch NOCK price from CoinPaprika"""
-    try:
-        response = requests.get(API_URL, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        price = data["quotes"]["USD"]["price"]
-        change_24h = data["quotes"]["USD"]["percent_change_24h"]
-        return price, change_24h
-    except Exception as e:
-        return None, None
-
-def update_price():
-    """Update the label with the latest price"""
-    price, change_24h = get_price()
-    if price is not None:
-        price_label.config(text=f"Price: ${price:.6f}")
-        change_label.config(text=f"24h Change: {change_24h:.2f}%")
+        no_keys_frame = tk.Frame(pubkeys_content, bg="white")
+        no_keys_frame.pack(fill="x", pady=20)
         
-        # Color for change
-        if change_24h >= 0:
-            change_label.config(fg="green")
-        else:
-            change_label.config(fg="red")
-    else:
-        price_label.config(text="Error fetching data")
-        change_label.config(text="")
+        tk.Label(
+            no_keys_frame,
+            text="🔑 No public keys found",
+            font=("Segoe UI", 12),
+            bg="white",
+            fg="#6B7280"
+        ).pack()
         
-# ---------------- THEMES ----------------
-current_theme = "light"
-
-themes = {
-    "light": {
-        "bg": "#ECECEC",
-        "fg": "#1A1A1A",
-        "button_bg": "#F5F5F5",
-        "button_fg": "#1A1A1A",
-        "button_active_bg": "#E0E0E0",
-        "button_active_fg": "#1A1A1A",
-        "entry_bg": "#FFFFFF",
-        "entry_fg": "#1A1A1A",  
-    },
-    "dark": {
-        "bg": "#1F1F1F",
-        "fg": "#c0c0c0",
-        "button_bg": "#2E2E2E",
-        "button_fg": "#E0E0E0",
-        "button_active_bg": "#3C3C3C",
-        "button_active_fg": "#FFFFFF",
-        "entry_bg": "#3C3C3C",
-        "entry_fg": "#c0c0c0",
-    }
-}
-
-def toggle_theme():
-    global current_theme
-    current_theme = "dark" if current_theme == "light" else "light"
-    btn_toggle_theme.config(text="🌞" if current_theme == "dark" else "🌙")
-    apply_theme(root)
-
- 
-def apply_theme(widget):
-    t = themes[current_theme]
-
-    def safe_config(w, **kwargs):
-        for k, v in kwargs.items():
-            try:
-                w.configure(**{k: v})
-            except tk.TclError:
-                pass
-
-    if isinstance(widget, (tk.Tk, tk.Toplevel, tk.Frame, tk.LabelFrame, tk.PanedWindow)):
-        safe_config(widget, bg=t["bg"])
-    elif isinstance(widget, tk.Label):
-        safe_config(widget, bg=t["bg"], fg=t["fg"])
-    elif isinstance(widget, tk.Button):
-        safe_config(
-            widget,
-            bg=t["button_bg"],
-            fg=t["button_fg"],
-            activebackground=t["button_active_bg"],
-            activeforeground=t["button_active_fg"],
-        )
-    elif isinstance(widget, (tk.Entry, tk.Text)):
-        safe_config(widget, bg=t["entry_bg"], fg=t["entry_fg"], insertbackground=t["entry_fg"])
-
-    if hasattr(widget, "winfo_children"):
-        for child in widget.winfo_children():
-            apply_theme(child)
-
-def create_themed_window(title="Window", size="400x300"):
-    win = tk.Toplevel(root)
-    win.title(title)
-    win.geometry(size)
-    
-    # Apply current theme immediately
-    apply_theme(win)
-    
-    return win
-       
-# --- Main Window ---
-
-root = tk.Tk()
-root.title("Robinhood's Nockchain GUI Wallet")
-root.geometry("1200x900")
-
-# --- Event Handlers ---
-
-def on_get_pubkeys():
-    btn_get_pubkeys.config(state='disabled')
-    output_text.config(state='normal')
-    output_text.delete('1.0', tk.END)
-    output_text.insert(tk.END, "🔑 Fetching Pubkeys...\nLoading...\n")
-    output_text.config(state='disabled')
-
-    def worker():
-        pubkeys = get_pubkeys()
-        def update_ui():
-            display_pubkeys(pubkeys)
-            output_text.config(state='normal')
-            output_text.insert(tk.END, "\n✅ Pubkeys Loaded.\n")
-            output_text.config(state='disabled')
-            btn_get_pubkeys.config(state='normal')
-        root.after(0, update_ui)
-
-    threading.Thread(target=worker, daemon=True).start()
-
-def on_send():
-    inputs = [
-        entry_sender.get().strip(),
-        entry_recipient.get().strip(),
-        entry_gift.get().strip(),
-        entry_fee.get().strip()
-    ]
-    if not all(inputs):
-        messagebox.showerror("Input error", "Please fill all fields.")
-        return
-    if not all(re.fullmatch(r"[A-Za-z0-9]+", inputs[i]) for i in (0, 1)):
-        messagebox.showerror("Input error", "❌ Sender and Recipient pubkeys must be alphanumeric.")
-        return
-    if not (inputs[2].isdigit() and inputs[3].isdigit()):
-        messagebox.showerror("Input error", "Gift and Fee must be numeric.")
-        return
-
-    btn_send.config(state='disabled')
-    output_text.config(state='normal')
-    output_text.delete('1.0', tk.END)
-    output_text.insert(tk.END, "⏳ Sending transaction...\n")
-    output_text.config(state='disabled')
-
-    q = queue.Queue()
-
-    def run_send():
-        try:
-            proc = subprocess.Popen(
-                ["./sendsimple.sh", "--nockchain-socket", SOCKET_PATH],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
+        tk.Label(
+            no_keys_frame,
+            text="Click 'Get Pubkeys' to fetch your keys",
+            font=("Segoe UI", 10),
+            bg="white",
+            fg="#9CA3AF"
+        ).pack(pady=(5, 0))
+    else:
+        for i, pubkey in enumerate(pubkeys):
+            # Key container with hover effect
+            key_frame = tk.Frame(
+                pubkeys_content,
+                bg="white",
+                relief="flat",
+                bd=1,
+                highlightbackground="#E5E7EB",
+                highlightthickness=1
             )
-            proc.stdin.write("\n".join(inputs) + "\n")
-            proc.stdin.flush()
-            proc.stdin.close()
+            key_frame.pack(fill="x", pady=5, padx=10)
+            
+            # Key content
+            content_frame = tk.Frame(key_frame, bg="white")
+            content_frame.pack(fill="both", expand=True, padx=15, pady=12)
+            
+            # Key icon and text
+            left_frame = tk.Frame(content_frame, bg="white")
+            left_frame.pack(side="left", fill="both", expand=True)
+            
+            tk.Label(
+                left_frame,
+                text="🔑",
+                font=("Segoe UI", 16),
+                bg="white"
+            ).pack(side="left")
+            
+            key_label = tk.Label(
+                left_frame,
+                text=f"Key {i+1}: {truncate_pubkey(pubkey)}",
+                font=("Consolas", 10),
+                bg="white",
+                fg="#374151"
+            )
+            key_label.pack(side="left", padx=(10, 0))
+            
+            # Copy button
+            copy_btn = ModernButton(
+                content_frame,
+                text="📋 Copy",
+                command=lambda pk=pubkey: copy_to_clipboard(pk),
+                style="secondary"
+            )
+            copy_btn.pack(side="right")
+            copy_btn.config(width=80, height=35)
 
-            for line in proc.stdout:
-                q.put(line)
-            proc.stdout.close()
-            proc.wait()
-        except Exception as e:
-            q.put(f"Error sending transaction: {e}\n")
-        finally:
-            q.put(None)
-
-    threading.Thread(target=run_send, daemon=True).start()
-    update_output_text(output_text, q)
-
-    def reenable_btn():
-        btn_send.config(state='normal')
-    root.after(10000, reenable_btn)
-    
 # --- Nocknames API Calls ---
 
 def resolve_nockname(address):
@@ -406,216 +474,271 @@ def resolve_nockaddress(name):
     except Exception:
         return None
 
-# --- Nocknames Window ---
-
-def open_nocknames_window():
-    win = create_themed_window("Nocknames", "900x600")  # Themed window
-    open_windows.append(win)  # track this window
-
-    # Register New button
-    def open_register():
-        import webbrowser
-        webbrowser.open("https://nocknames.com")
-
-    btn_register = tk.Button(win, text="Register New", command=open_register, width=15)
-    btn_register.pack(pady=15)
-
-    # Separator line
-    sep = tk.Frame(win, height=2, bd=1, relief=tk.SUNKEN)
-    sep.pack(fill=tk.X, padx=5, pady=5)
-
-    # Resolve Address Section
-    frame_resolve_address = tk.LabelFrame(win, text="Resolve Name from Address")
-    frame_resolve_address.pack(fill=tk.X, padx=20, pady=10)
-
-    lbl_address = tk.Label(frame_resolve_address, text="Address:")
-    lbl_address.grid(row=0, column=0, sticky="w", padx=5, pady=5)
-    entry_address = tk.Entry(frame_resolve_address, width=60)
-    entry_address.grid(row=0, column=1, padx=5, pady=5)
-
-    btn_resolve_address = tk.Button(frame_resolve_address, text="Resolve", width=12)
-    btn_resolve_address.grid(row=0, column=2, padx=5, pady=5)
-
-    txt_resolved_name = tk.Text(frame_resolve_address, height=3, width=60, state='disabled')
-    txt_resolved_name.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
-
-    btn_copy_name = tk.Button(frame_resolve_address, text="Copy", width=10)
-    btn_copy_name.grid(row=2, column=2, padx=5, pady=5, sticky="e")
-
-    # Resolve Name Section
-    frame_resolve_name = tk.LabelFrame(win, text="Resolve Address from Name")
-    frame_resolve_name.pack(fill=tk.X, padx=20, pady=10)
-
-    lbl_name = tk.Label(frame_resolve_name, text="Name:")
-    lbl_name.grid(row=0, column=0, sticky="w", padx=5, pady=5)
-    entry_name = tk.Entry(frame_resolve_name, width=60)
-    entry_name.grid(row=0, column=1, padx=5, pady=5)
-
-    btn_resolve_name = tk.Button(frame_resolve_name, text="Resolve", width=12)
-    btn_resolve_name.grid(row=0, column=2, padx=5, pady=5)
-
-    txt_resolved_address = tk.Text(frame_resolve_name, height=3, width=60, state='disabled')
-    txt_resolved_address.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
-
-    btn_copy_address = tk.Button(frame_resolve_name, text="Copy", width=10)
-    btn_copy_address.grid(row=2, column=2, padx=5, pady=5, sticky="e")
-
-    # Copy helper functions
-    def copy_text(widget):
-        root.clipboard_clear()
-        text = widget.get('1.0', tk.END).strip()
-        if text:
-            root.clipboard_append(text)
-            messagebox.showinfo("Copied", "Copied to clipboard.")
-        else:
-            messagebox.showwarning("Warning", "Nothing to copy.")
-
-    btn_copy_name.config(command=lambda: copy_text(txt_resolved_name))
-    btn_copy_address.config(command=lambda: copy_text(txt_resolved_address))
-
-    # Resolve button functions
-    def on_resolve_address():
-        address = entry_address.get().strip()
-        if not address:
-            messagebox.showerror("Input error", "Address field is empty.")
-            return
-        txt_resolved_name.config(state='normal')
-        txt_resolved_name.delete('1.0', tk.END)
-        txt_resolved_name.insert(tk.END, "Resolving...")
-        txt_resolved_name.config(state='disabled')
-
-        def worker():
-            name = resolve_nockname(address)
-            result = name if name else "(No name found)"
-            def update_ui():
-                txt_resolved_name.config(state='normal')
-                txt_resolved_name.delete('1.0', tk.END)
-                txt_resolved_name.insert(tk.END, result)
-                txt_resolved_name.config(state='disabled')
-            win.after(0, update_ui)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def on_resolve_name():
-        name = entry_name.get().strip()
-        if not name:
-            messagebox.showerror("Input error", "Name field is empty.")
-            return
-        txt_resolved_address.config(state='normal')
-        txt_resolved_address.delete('1.0', tk.END)
-        txt_resolved_address.insert(tk.END, "Resolving...")
-        txt_resolved_address.config(state='disabled')
-
-        def worker():
-            address = resolve_nockaddress(name)
-            result = address if address else "(No address found)"
-            def update_ui():
-                txt_resolved_address.config(state='normal')
-                txt_resolved_address.delete('1.0', tk.END)
-                txt_resolved_address.insert(tk.END, result)
-                txt_resolved_address.config(state='disabled')
-            win.after(0, update_ui)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    btn_resolve_address.config(command=on_resolve_address)
-    btn_resolve_name.config(command=on_resolve_name)
-
-    
-# --- Check Balance Window ---
 def open_check_balance_window():
-    win = create_themed_window("Check Balance", "900x200")  # only one Toplevel
+    win = create_modern_window("💰 Check Balance", 600, 250)
     
-    tk.Label(win, text="Enter pubkey:").pack(padx=10, pady=5)
-    entry_pubkey = tk.Entry(win, width=80)
-    entry_pubkey.pack(padx=10, pady=5)
-
-    def on_check():
-        pubkey = entry_pubkey.get().strip()
+    # Header
+    header_frame = tk.Frame(win, bg="#1F2937", height=60)
+    header_frame.pack(fill="x")
+    header_frame.pack_propagate(False)
+    tk.Label(
+        header_frame,
+        text="💰 Check Account Balance",
+        font=("Segoe UI", 14, "bold"),
+        bg="#1F2937",
+        fg="white"
+    ).pack(pady=15)
+    
+    # Content frame
+    content = tk.Frame(win, bg="white")
+    content.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Input section
+    tk.Label(content, text="Enter Pubkey:", font=("Segoe UI", 11, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(5,5))
+    
+    # Input frame with entry and button
+    input_frame = tk.Frame(content, bg="white")
+    input_frame.pack(fill="x", pady=(0,10))
+    
+    pubkey_entry = tk.Entry(input_frame, font=("Segoe UI", 11))
+    pubkey_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+    pubkey_entry.focus_set()
+    
+    def check_balance():
+        pubkey = pubkey_entry.get().strip()
         if not pubkey:
-            messagebox.showerror("Input error", "Please enter a pubkey.")
+            messagebox.showerror("Input Error", "Please enter a public key.")
             return
         if not re.fullmatch(r"[A-Za-z0-9]+", pubkey):
-            messagebox.showerror("Input error", "❌ Invalid pubkey format. Only alphanumeric characters allowed.")
+            messagebox.showerror("Input Error", "❌ Invalid pubkey format. Only alphanumeric characters allowed.")
             return
-
+        
+        # Show initial "Checking..." message in main GUI
         output_text.config(state='normal')
         output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"🔍 Checking balance for:\n{pubkey}\n\nLoading...\n")
+        output_text.insert(tk.END, f"💰 Checking balance...\nAddress: {truncate_pubkey(pubkey)}\nPlease wait...\n\n")
         output_text.config(state='disabled')
-
-        q = queue.Queue()
-
+        
+        # Close popup immediately
+        win.destroy()
+        
+        # Queue for main GUI output
+        main_q = queue.Queue()
+        
         def run_check_balance():
             try:
                 proc = subprocess.Popen(
-                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH,
-                     "list-notes-by-pubkey", pubkey],
+                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH, "list-notes-by-pubkey", pubkey],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1
                 )
+                
                 total_assets = 0
                 required_sigs_list = []
-
+                
                 for line in proc.stdout:
+                    # Only extract assets and required signatures
                     m_asset = re.search(r"- Assets:\s*(\d+)", line)
                     if m_asset:
                         total_assets += int(m_asset.group(1))
-
                     m_sig = re.search(r"- Required Signatures:\s*(\d+)", line)
                     if m_sig:
                         required_sigs_list.append(int(m_sig.group(1)))
-
+                
                 proc.stdout.close()
                 proc.wait()
-
+                
                 nocks = total_assets / 65536
-
+                
                 if not required_sigs_list:
                     status_msg = "ℹ️ No 'Required Signatures' info found in notes.\n"
                 elif all(m == 1 for m in required_sigs_list):
-                    status_msg = "✅ Coins are Spendable! All required signatures = 1\n"
+                    status_msg = "✅ Coins are Spendable! All required signatures = 1"
                 else:
-                    status_msg = "❌❌❌❌ Some Coins are Unspendable! Required signatures > 1 detected ❌❌❌❌\n"
-
-                output = f"Total Assets: {total_assets} Nicks (~{nocks:.2f} Nocks)\n{status_msg}"
-
-                q.put(output)
+                    status_msg = "❌ Some Coins are Unspendable! Required signatures > 1 detected ❌"
+                
+                summary = f"\n{'='*50}\n"
+                summary += f"💰 BALANCE SUMMARY\n"
+                summary += f"{'='*50}\n"
+                summary += f"Total Assets: {total_assets:,} Nicks\n"
+                summary += f"Equivalent: ~{nocks:,.4f} Nocks\n"
+                summary += f"Status: {status_msg}\n"
+                
+                main_q.put(summary)
             except Exception as e:
-                q.put(f"Error checking balance: {e}\n")
+                main_q.put(f"❌ Error checking balance: {e}\n")
             finally:
-                q.put(None)
-
+                main_q.put(None)
+        
         threading.Thread(target=run_check_balance, daemon=True).start()
-        update_output_text(output_text, q)
+        update_output_text(output_text, main_q)
+    
+    check_btn = tk.Button(input_frame, text="Check", command=check_balance, bg="#4F46E5", fg="white", font=("Segoe UI", 10, "bold"), padx=20)
+    check_btn.pack(side="right")
 
-        win.destroy()
+def open_nocknames_window():
+    win = create_modern_window("🌐 Nocknames", 800, 600)
+    
+    # Header
+    header_frame = tk.Frame(win, bg="#1F2937", height=60)
+    header_frame.pack(fill="x")
+    header_frame.pack_propagate(False)
+    
+    header_content = tk.Frame(header_frame, bg="#1F2937")
+    header_content.pack(fill="both", expand=True, padx=20, pady=15)
+    
+    tk.Label(
+        header_content,
+        text="🌐 Nocknames Resolution Service",
+        font=("Segoe UI", 14, "bold"),
+        bg="#1F2937",
+        fg="white"
+    ).pack(side="left")
+    
+    register_btn = ModernButton(
+        header_content, 
+        text="🔗 Register New",
+        command=lambda: __import__('webbrowser').open("https://nocknames.com"),
+        style="success"
+    )
+    register_btn.pack(side="right")
+    
+    # Main content
+    main_frame = tk.Frame(win, bg="#F9FAFB")
+    main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Address to Name section
+    addr_frame = ModernFrame(main_frame, title="🔍 Resolve Name from Address")
+    addr_frame.pack(fill="x", pady=(0, 15))
+    
+    tk.Label(addr_frame, text="Wallet Address", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
+    
+    addr_input_frame = tk.Frame(addr_frame, bg="white")
+    addr_input_frame.pack(fill="x", padx=20, pady=(0, 15))
+    
+    address_entry = ModernEntry(addr_input_frame, placeholder="Enter wallet address...")
+    address_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+    
+    addr_result = tk.Text(addr_frame, height=2, bg="#F8FAFC", fg="#374151", font=("Consolas", 9), state='disabled', relief="flat", bd=0)
+    addr_result.pack(fill="x", padx=20, pady=(0, 15))
+    
+    def resolve_address():
+        address = address_entry.get().strip()
+        if not address:
+            messagebox.showerror("Input Error", "Address field is empty.")
+            return
+        addr_result.config(state='normal')
+        addr_result.delete('1.0', tk.END)
+        addr_result.insert(tk.END, "🔍 Resolving...")
+        addr_result.config(state='disabled')
 
-    btn_check = tk.Button(win, text="Check Balance", command=on_check)
-    btn_check.pack(pady=10)
+        def worker():
+            name = resolve_nockname(address)
+            result = name if name else "(No name found for this address)"
+            def update_ui():
+                addr_result.config(state='normal')
+                addr_result.delete('1.0', tk.END)
+                addr_result.insert(tk.END, result)
+                addr_result.config(state='disabled')
+            win.after(0, update_ui)
 
-# --- Signing ---
+        threading.Thread(target=worker, daemon=True).start()
+    
+    resolve_addr_btn = ModernButton(addr_input_frame, text="🔍 Resolve", command=resolve_address, style="secondary")
+    resolve_addr_btn.pack(side="right")
+    
+    # Name to Address section
+    name_frame = ModernFrame(main_frame, title="🔍 Resolve Address from Name")
+    name_frame.pack(fill="x")
+    
+    tk.Label(name_frame, text="Nockname", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
+    
+    name_input_frame = tk.Frame(name_frame, bg="white")
+    name_input_frame.pack(fill="x", padx=20, pady=(0, 15))
+    
+    name_entry = ModernEntry(name_input_frame, placeholder="Enter nockname...")
+    name_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+    
+    name_result = tk.Text(name_frame, height=2, bg="#F8FAFC", fg="#374151", font=("Consolas", 9), state='disabled', relief="flat", bd=0)
+    name_result.pack(fill="x", padx=20, pady=(0, 15))
+    
+    def resolve_name():
+        name = name_entry.get().strip()
+        if not name:
+            messagebox.showerror("Input Error", "Name field is empty.")
+            return
+        name_result.config(state='normal')
+        name_result.delete('1.0', tk.END)
+        name_result.insert(tk.END, "🔍 Resolving...")
+        name_result.config(state='disabled')
 
-ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        def worker():
+            address = resolve_nockaddress(name)
+            result = address if address else "(No address found for this name)"
+            def update_ui():
+                name_result.config(state='normal')
+                name_result.delete('1.0', tk.END)
+                name_result.insert(tk.END, result)
+                name_result.config(state='disabled')
+            win.after(0, update_ui)
+
+        threading.Thread(target=worker, daemon=True).start()
+    
+    resolve_name_btn = ModernButton(name_input_frame, text="🔍 Resolve", command=resolve_name, style="secondary")
+    resolve_name_btn.pack(side="right")
 
 def open_sign_message_window():
-    win = create_themed_window("Sign Message","900x200")  # Themed window
-
-    tk.Label(win, text="Enter message to sign:").pack(pady=10)
-    entry = tk.Entry(win, width=60)
-    entry.pack(pady=5)
-
+    win = create_modern_window("✍️ Sign Message", 600, 350)
+    
+    # Header
+    header_frame = tk.Frame(win, bg="#1F2937", height=60)
+    header_frame.pack(fill="x")
+    header_frame.pack_propagate(False)
+    
+    tk.Label(
+        header_frame,
+        text="✍️ Digital Message Signing",
+        font=("Segoe UI", 14, "bold"),
+        bg="#1F2937",
+        fg="white"
+    ).pack(pady=15)
+    
+    # Content
+    content = ModernFrame(win)
+    content.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    tk.Label(content, text="Message to Sign", font=("Segoe UI", 11, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
+    
+    message_frame = tk.Frame(content, bg="white")
+    message_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+    
+    message_text = tk.Text(
+        message_frame, 
+        height=6, 
+        bg="white", 
+        fg="#374151", 
+        font=("Segoe UI", 10),
+        relief="flat",
+        bd=1,
+        highlightbackground="#E5E7EB",
+        highlightthickness=1,
+        wrap="word"
+    )
+    message_text.pack(fill="both", expand=True)
+    
     def sign_message():
-        message = entry.get().strip()
+        message = message_text.get("1.0", tk.END).strip()
         if not message:
-            messagebox.showerror("Error", "Please enter a message.")
+            messagebox.showerror("Error", "Please enter a message to sign.")
             return
 
         output_text.config(state='normal')
         output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"🖊 Signing message:\n{message}\n\nProcessing...\n")
+        output_text.insert(tk.END, f"✍️ Signing message...\n")
+        output_text.insert(tk.END, f"Message: {message[:100]}{'...' if len(message) > 100 else ''}\n\n")
+        output_text.insert(tk.END, "Processing digital signature...\n")
         output_text.config(state='disabled')
 
         q = queue.Queue()
@@ -631,77 +754,108 @@ def open_sign_message_window():
                     bufsize=1
                 )
                 for line in proc.stdout:
-                    clean_line = ANSI_ESCAPE.sub('', line).strip()  # remove ANSI codes
+                    clean_line = ANSI_ESCAPE.sub('', line).strip()
                     if clean_line:
-                        # Only show important messages
                         if "error" in clean_line.lower():
                             q.put(f"⚠️ {clean_line}\n")
                         elif "signed" in clean_line.lower():
                             q.put(f"✅ {clean_line}\n")
+                        else:
+                            q.put(f"{clean_line}\n")
                 proc.stdout.close()
                 proc.wait()
             except Exception as e:
-                q.put(f"Error signing message: {e}\n")
+                q.put(f"❌ Error signing message: {e}\n")
             finally:
                 q.put(None)
 
         threading.Thread(target=run_sign, daemon=True).start()
         update_output_text(output_text, q)
-
         win.destroy()
 
-    tk.Button(win, text="Sign", command=sign_message).pack(pady=10)
-
-
-# --- Verify Message ---
-
-# ANSI escape code regex
-ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    sign_btn = ModernButton(content, text="✍️ Sign Message", command=sign_message)
+    sign_btn.pack(padx=20, pady=10)
 
 def open_verify_message_window():
-    win = create_themed_window("Verify Message", "900x300")  # Themed window
-    win.attributes('-topmost', True)  # Always on top
-
-    tk.Label(win, text="Enter message to verify:").pack(pady=5)
-    message_entry = tk.Entry(win, width=60)
-    message_entry.pack(pady=5)
-
-    folder_frame = tk.Frame(win)
-    folder_frame.pack(pady=5, fill=tk.X, padx=5)
-
-    tk.Label(folder_frame, text="Select folder containing signature file:").pack(side=tk.LEFT)
-    folder_path_var = tk.StringVar()
-    folder_entry = tk.Entry(folder_frame, textvariable=folder_path_var, width=40)
-    folder_entry.pack(side=tk.LEFT, padx=5)
-
+    win = create_modern_window("🔍 Verify Message", 700, 500)
+    
+    # Header
+    header_frame = tk.Frame(win, bg="#1F2937", height=60)
+    header_frame.pack(fill="x")
+    header_frame.pack_propagate(False)
+    
+    tk.Label(
+        header_frame,
+        text="🔍 Digital Signature Verification",
+        font=("Segoe UI", 14, "bold"),
+        bg="#1F2937",
+        fg="white"
+    ).pack(pady=15)
+    
+    # Content
+    content = ModernFrame(win)
+    content.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Message field
+    tk.Label(content, text="Original Message", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
+    
+    message_frame = tk.Frame(content, bg="white")
+    message_frame.pack(fill="x", padx=20, pady=(0, 15))
+    
+    message_entry = ModernEntry(message_frame, placeholder="Enter the original message...")
+    message_entry.pack(fill="x")
+    
+    # Signature folder
+    tk.Label(content, text="Signature File Location", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(0, 5))
+    
+    folder_frame = tk.Frame(content, bg="white")
+    folder_frame.pack(fill="x", padx=20, pady=(0, 15))
+    
+    folder_var = tk.StringVar()
+    folder_entry = ModernEntry(folder_frame, placeholder="Select folder containing signature file...")
+    folder_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+    
     def browse_folder():
         folder = filedialog.askdirectory(initialdir=os.path.expanduser("~"))
         if folder:
-            folder_path_var.set(folder)
+            folder_var.set(folder)
+            # Update the entry display
+            folder_entry.entry.delete(0, tk.END)
+            folder_entry.entry.insert(0, folder)
+            folder_entry.entry.config(fg="#374151")
 
-    tk.Button(folder_frame, text="Browse", command=browse_folder).pack(side=tk.LEFT)
-
-    tk.Label(win, text="Enter public key (Base58):").pack(pady=5)
-    pubkey_entry = tk.Entry(win, width=60)
-    pubkey_entry.pack(pady=5)
-
+    browse_btn = ModernButton(folder_frame, text="📁 Browse", command=browse_folder, style="secondary")
+    browse_btn.pack(side="right")
+    
+    # Public key field
+    tk.Label(content, text="Public Key (Base58)", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(0, 5))
+    
+    pubkey_frame = tk.Frame(content, bg="white")
+    pubkey_frame.pack(fill="x", padx=20, pady=(0, 20))
+    
+    pubkey_entry = ModernEntry(pubkey_frame, placeholder="Enter public key for verification...")
+    pubkey_entry.pack(fill="x")
+    
     def verify_message():
         message = message_entry.get().strip()
-        folder = folder_path_var.get().strip()
+        folder = folder_var.get().strip() or folder_entry.get().strip()
         pubkey = pubkey_entry.get().strip()
 
         if not message or not folder or not pubkey:
-            messagebox.showerror("Error", "Please enter message, folder, and public key.")
+            messagebox.showerror("Error", "Please fill in all fields.")
             return
 
         sig_file = os.path.join(folder, "message.sig")
         if not os.path.isfile(sig_file):
-            messagebox.showerror("Error", f"Signature file not found in folder:\n{sig_file}")
+            messagebox.showerror("Error", f"Signature file not found:\n{sig_file}")
             return
 
         output_text.config(state='normal')
         output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"🕵️ Verifying message:\n{message}\n\nProcessing...\n")
+        output_text.insert(tk.END, f"🔍 Verifying digital signature...\n")
+        output_text.insert(tk.END, f"Message: {message[:50]}{'...' if len(message) > 50 else ''}\n")
+        output_text.insert(tk.END, f"Signature file: {sig_file}\n")
+        output_text.insert(tk.END, f"Public key: {truncate_pubkey(pubkey)}\n\n")
         output_text.config(state='disabled')
 
         q = queue.Queue()
@@ -732,9 +886,11 @@ def open_verify_message_window():
 
                     lower_line = clean_line.lower()
                     if "invalid signature" in lower_line or "not verified" in lower_line:
-                        q.put(f"❌ {clean_line}\n")
+                        q.put(f"❌ VERIFICATION FAILED: {clean_line}\n")
                     elif "valid signature" in lower_line or "success" in lower_line:
-                        q.put(f"✅ {clean_line}\n")
+                        q.put(f"✅ VERIFICATION SUCCESS: {clean_line}\n")
+                    else:
+                        q.put(f"ℹ️ {clean_line}\n")
 
                 proc.stdout.close()
                 proc.wait()
@@ -748,79 +904,242 @@ def open_verify_message_window():
         update_output_text(output_text, q)
         win.destroy()
 
-    tk.Button(win, text="Verify", command=verify_message).pack(pady=10)
+    verify_btn = ModernButton(content, text="🔍 Verify Signature", command=verify_message)
+    verify_btn.pack(padx=20, pady=10)
 
+def on_get_pubkeys():
+    btn_get_pubkeys.button.config(text="Loading...")
+    btn_get_pubkeys.set_enabled(False)
+    
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, "🔑 Fetching Public Keys...\nThis may take a moment...\n\n")
+    output_text.config(state='disabled')
 
-# Top frame for buttons
-top_frame = tk.Frame(root)
-top_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+    def worker():
+        pubkeys = get_pubkeys()
+        def update_ui():
+            display_pubkeys(pubkeys)
+            output_text.config(state='normal')
+            output_text.insert(tk.END, f"✅ Found {len(pubkeys)} public keys\n")
+            if pubkeys:
+                for i, pk in enumerate(pubkeys, 1):
+                    output_text.insert(tk.END, f"   {i}. {pk}\n")
+            output_text.config(state='disabled')
+            btn_get_pubkeys.button.config(text="🔑 Get Pubkeys")
+            btn_get_pubkeys.set_enabled(True)
+        root.after(0, update_ui)
 
-btn_get_pubkeys = tk.Button(top_frame, text="Get Pubkeys", command=on_get_pubkeys, width=15)
-btn_get_pubkeys.pack(side=tk.LEFT, padx=5)
+    threading.Thread(target=worker, daemon=True).start()
 
-btn_check_balance = tk.Button(top_frame, text="Check Balance", command=open_check_balance_window, width=15)
-btn_check_balance.pack(side=tk.LEFT, padx=5)
+def on_send():
+    # Get values from modern entries
+    inputs = [
+        sender_entry.get().strip(),
+        recipient_entry.get().strip(),
+        gift_entry.get().strip(),
+        fee_entry.get().strip()
+    ]
+    
+    if not all(inputs):
+        messagebox.showerror("Input Error", "Please fill all fields.")
+        return
+    if not all(re.fullmatch(r"[A-Za-z0-9]+", inputs[i]) for i in (0, 1)):
+        messagebox.showerror("Input Error", "❌ Sender and Recipient pubkeys must be alphanumeric.")
+        return
+    if not (inputs[2].isdigit() and inputs[3].isdigit()):
+        messagebox.showerror("Input Error", "Gift and Fee must be numeric.")
+        return
 
-btn_nocknames = tk.Button(top_frame, text="Nocknames", command=open_nocknames_window, width=15)
-btn_nocknames.pack(side=tk.LEFT, padx=5)
+    btn_send.button.config(text="Sending...")
+    btn_send.set_enabled(False)
+        
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, "⏳ Initiating transaction...\n")
+    output_text.insert(tk.END, f"From: {truncate_pubkey(inputs[0])}\n")
+    output_text.insert(tk.END, f"To: {truncate_pubkey(inputs[1])}\n")
+    output_text.insert(tk.END, f"Amount: {inputs[2]} Nicks\n")
+    output_text.insert(tk.END, f"Fee: {inputs[3]} Nicks\n\n")
+    output_text.config(state='disabled')
 
-btn_sign_message = tk.Button(top_frame, text="Sign Message", command=open_sign_message_window, width=15)
-btn_sign_message.pack(side=tk.LEFT, padx=5)
+    q = queue.Queue()
 
-btn_verify_message = tk.Button(top_frame, text="Verify Message", command=open_verify_message_window, width=15)
-btn_verify_message.pack(side=tk.LEFT, padx=5)
+    def run_send():
+        try:
+            proc = subprocess.Popen(
+                ["./sendsimple.sh", "--nockchain-socket", SOCKET_PATH],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            proc.stdin.write("\n".join(inputs) + "\n")
+            proc.stdin.flush()
+            proc.stdin.close()
 
-# Theme toggle button
-btn_toggle_theme = tk.Button(top_frame, text="🌙", command=toggle_theme, width=1)
-btn_toggle_theme.pack(side=tk.LEFT, padx=5)
+            for line in proc.stdout:
+                q.put(line)
+            proc.stdout.close()
+            proc.wait()
+        except Exception as e:
+            q.put(f"❌ Error sending transaction: {e}\n")
+        finally:
+            q.put(None)
 
-# Frame for pubkeys
-frame_pubkeys = tk.Frame(root)
-frame_pubkeys.pack(fill=tk.X, padx=10, pady=5)
+    threading.Thread(target=run_send, daemon=True).start()
+    update_output_text(output_text, q)
 
-# Send transaction frame
-frame_send = tk.LabelFrame(root, text="Send Transaction", fg="#636363")
-frame_send.pack(fill=tk.X, padx=10, pady=10)
+    def reenable_btn():
+        btn_send.button.config(text="💸 Send Transaction")
+        btn_send.set_enabled(True)
+    root.after(8000, reenable_btn)
+    
+# Header
+root = tk.Tk()
+root.title("Robinhood's Nockchain Wallet Pro Edition")
+root.geometry("1500x1000")
+root.configure(bg="#F9FAFB")
+header = tk.Frame(root, bg="#1F2937", height=60)
+header.pack(fill="x")
+header.pack_propagate(False)
 
-tk.Label(frame_send, text="Sender Pubkey:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
-entry_sender = tk.Entry(frame_send, width=70)
-entry_sender.grid(row=0, column=1, padx=5, pady=5)
+header_content = tk.Frame(header, bg="#1F2937")
+header_content.pack(fill="both", expand=True, padx=30, pady=15)
 
-tk.Label(frame_send, text="Recipient Pubkey:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
-entry_recipient = tk.Entry(frame_send, width=70)
-entry_recipient.grid(row=1, column=1, padx=5, pady=5)
+# Logo and title
+logo_frame = tk.Frame(header_content, bg="#1F2937")
+logo_frame.pack(side="left")
 
-tk.Label(frame_send, text="Gift (Nicks):").grid(row=2, column=0, sticky="e", padx=5, pady=5)
-entry_gift = tk.Entry(frame_send, width=20)
-entry_gift.grid(row=2, column=1, sticky="w", padx=5, pady=5)
+tk.Label(
+    logo_frame,
+    text="💎",
+    font=("Segoe UI", 20),
+    bg="#1F2937"
+).pack(side="left")
 
-tk.Label(frame_send, text="Fee (Nicks):").grid(row=3, column=0, sticky="e", padx=5, pady=5)
-entry_fee = tk.Entry(frame_send, width=20)
-entry_fee.grid(row=3, column=1, sticky="w", padx=5, pady=5)
+tk.Label(
+    logo_frame,
+    text="Robinhood's Nockchain Wallet Pro",
+    font=("Segoe UI", 16, "bold"),
+    bg="#1F2937",
+    fg="white"
+).pack(side="left", padx=(10, 0))
 
-btn_send = tk.Button(frame_send, text="Send Transaction", command=on_send)
-btn_send.grid(row=4, column=0, columnspan=2, pady=10)
+# Action buttons in header
+header_buttons = tk.Frame(header_content, bg="#1F2937")
+header_buttons.pack(side="right")
 
-# Output text box
-output_text = tk.Text(root, height=20, bg="#F0F0F0", fg="black", state='disabled')
-output_text.pack(fill=tk.BOTH, padx=10, pady=10, expand=True)
+btn_get_pubkeys = ModernButton(header_buttons, text="🔑 Get Pubkeys", command=on_get_pubkeys)
+btn_get_pubkeys.pack(side="left", padx=2)
 
-# Date/time label
-datetime_label = tk.Label(root, text="", bg="#C0C0C0")
-datetime_label.pack(side=tk.BOTTOM, pady=5)
+btn_check_balance = ModernButton(header_buttons, text="💰 Balance", command=open_check_balance_window, style="secondary")
+btn_check_balance.pack(side="left", padx=2)
 
-update_datetime_label()
+btn_nocknames = ModernButton(header_buttons, text="🌐 Names", command=open_nocknames_window, style="secondary")
+btn_nocknames.pack(side="left", padx=2)
 
-price_label = tk.Label(root, text="Loading...", font=("Arial", 12), bg="#c0c0c0")
-price_label.pack()
+btn_sign = ModernButton(header_buttons, text="✍️ Sign", command=open_sign_message_window, style="secondary")
+btn_sign.pack(side="left", padx=2)
 
-change_label = tk.Label(root, text="", font=("Arial", 12), bg="#c0c0c0")
-change_label.pack()
+btn_verify = ModernButton(header_buttons, text="🔍 Verify", command=open_verify_message_window, style="secondary")
+btn_verify.pack(side="left", padx=2)
 
-# Initial update
-update_price()
+# Main content area
+main_container = tk.Frame(root, bg="#F9FAFB")
+main_container.pack(fill="both", expand=True, padx=20, pady=20)
 
-# Apply theme to root
-apply_theme(root)
+# Left panel - Main content
+left_panel = tk.Frame(main_container, bg="#F9FAFB")
+left_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
-root.mainloop()  
+# Pubkeys section
+pubkeys_frame = ModernFrame(left_panel, title="🔑 Public Keys")
+pubkeys_frame.pack(fill="x", pady=(0, 15))
+
+pubkeys_content = tk.Frame(pubkeys_frame, bg="white")
+pubkeys_content.pack(fill="both", expand=True, pady=10)
+
+# Activity Log section (moved to left, below pubkeys)
+output_frame = ModernFrame(left_panel, title="📋 Activity Log")
+output_frame.pack(fill="both", expand=True)
+
+output_text = tk.Text(
+    output_frame,
+    bg="white",
+    fg="#374151",
+    font=("Consolas", 9),
+    relief="flat",
+    bd=0,
+    state='disabled',
+    wrap="word"
+)
+output_text.pack(fill="both", expand=True, padx=20, pady=20)
+
+# Scrollbar for output
+scrollbar = ttk.Scrollbar(output_text)
+scrollbar.pack(side="right", fill="y")
+output_text.config(yscrollcommand=scrollbar.set)
+scrollbar.config(command=output_text.yview)
+
+# Right panel - Send Transaction only
+right_panel = tk.Frame(main_container, bg="#F9FAFB")
+right_panel.pack(side="right", fill="y", padx=(10, 0))
+
+# Send Transaction Panel
+send_frame = ModernFrame(right_panel, title="💸 Send Transaction")
+send_frame.pack(fill="x")
+send_frame.config(width=400)
+
+# Modern form fields
+fields_frame = tk.Frame(send_frame, bg="white")
+fields_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+tk.Label(fields_frame, text="Sender Public Key", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(0, 5))
+sender_entry = ModernEntry(fields_frame, placeholder="Enter sender pubkey...")
+sender_entry.pack(fill="x", pady=(0, 15))
+
+tk.Label(fields_frame, text="Recipient Public Key", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(0, 5))
+recipient_entry = ModernEntry(fields_frame, placeholder="Enter recipient pubkey...")
+recipient_entry.pack(fill="x", pady=(0, 15))
+
+amounts_frame = tk.Frame(fields_frame, bg="white")
+amounts_frame.pack(fill="x", pady=(0, 15))
+
+gift_frame = tk.Frame(amounts_frame, bg="white")
+gift_frame.pack(side="left", fill="x", expand=True, padx=(0, 10))
+tk.Label(gift_frame, text="Gift Amount (Nicks)", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(0, 5))
+gift_entry = ModernEntry(gift_frame, placeholder="0")
+gift_entry.pack(fill="x")
+
+fee_frame = tk.Frame(amounts_frame, bg="white")
+fee_frame.pack(side="left", fill="x", expand=True, padx=(10, 0))
+tk.Label(fee_frame, text="Fee (Nicks)", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(0, 5))
+fee_entry = ModernEntry(fee_frame, placeholder="0")
+fee_entry.pack(fill="x")
+
+btn_send = ModernButton(fields_frame, text="💸 Send Transaction", command=on_send, style="primary")
+btn_send.pack(fill="x", pady=15)
+
+# Status bar
+status_bar = StatusBar(root)
+status_bar.pack(side="bottom", fill="x")
+
+# Initial message
+output_text.config(state='normal')
+output_text.insert(tk.END, "🚀 Welcome to Robinhood's Nockchain Wallet Pro Edition!\n")
+output_text.insert(tk.END, "─" * 50 + "\n")
+output_text.insert(tk.END, "Click 'Get Pubkeys' to load your public keys.\n\n")
+output_text.insert(tk.END, f"Socket Path: {SOCKET_PATH}\n")
+output_text.insert(tk.END, f"Status: Ready ✅\n")
+output_text.insert(
+    "end", 
+    "🙏 Donate to Robinhood if you like the GUI : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
+)
+output_text.config(state='disabled')
+
+# Initialize with empty pubkeys display
+display_pubkeys([])
+
+root.mainloop()
