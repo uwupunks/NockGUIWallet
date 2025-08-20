@@ -1036,7 +1036,7 @@ def on_send():
 # Header
 root = tk.Tk()
 root.title("Robinhood's Nockchain Wallet Pro Edition")
-root.geometry("1500x1000")
+root.geometry("1600x1200")
 root.configure(bg="#1F2937")
 header = tk.Frame(root, bg="#1F2937", height=60)
 header.pack(fill="x")
