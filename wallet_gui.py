@@ -366,7 +366,7 @@ def show_notification(title, message):
     # Auto close after 2 seconds
     notification.after(2000, notification.destroy)
     
-def truncate_pubkey(key, start_chars=12, end_chars=12):
+def truncate_pubkey(key, start_chars=18, end_chars=18):
     """Shorten a public key for display purposes."""
     if len(key) <= start_chars + end_chars + 3:
         return key
@@ -402,18 +402,30 @@ def display_pubkeys(pubkeys):
     )
     selected_btn.pack(fill="x", padx=10, pady=5)
 
-    # Frame containing all key options
-    options_frame = tk.Frame(dropdown_frame, bg="white", bd=0)
-    options_frame.pack(fill="x", padx=10)
-    options_frame.pack_forget()  # initially hidden
+    # --- Scrollable dropdown (Canvas + Scrollbar) ---
+    dropdown_canvas = tk.Canvas(dropdown_frame, bg="white", highlightthickness=0, height=300)
+    scrollbar = tk.Scrollbar(dropdown_frame, orient="vertical", command=dropdown_canvas.yview)
+    options_frame = tk.Frame(dropdown_canvas, bg="white")
 
-    # Copy button and display label
+    options_frame.bind(
+        "<Configure>",
+        lambda e: dropdown_canvas.configure(scrollregion=dropdown_canvas.bbox("all"))
+    )
+
+    window_id = dropdown_canvas.create_window((0, 0), window=options_frame, anchor="nw")
+    dropdown_canvas.configure(yscrollcommand=scrollbar.set)
+
+    # Hide initially
+    dropdown_canvas.pack_forget()
+    scrollbar.pack_forget()
+
+    # Copy button + display label
     info_frame = tk.Frame(pubkeys_content, bg="white")
     info_frame.pack(fill="x", padx=10, pady=(0, 10))
 
     key_label = tk.Label(
         info_frame,
-        text=truncate_pubkey(pubkeys[0]),  # abbreviated display
+        text=truncate_pubkey(pubkeys[0]),
         font=("Consolas", 10),
         bg="white",
         fg="#374151"
@@ -429,20 +441,22 @@ def display_pubkeys(pubkeys):
     copy_btn.pack(side="right")
     copy_btn.config(width=80, height=35)
 
-    # Function to toggle dropdown visibility
+    # Toggle dropdown
     def toggle_dropdown():
         if dropdown_open.get():
-            options_frame.pack_forget()
+            dropdown_canvas.pack_forget()
+            scrollbar.pack_forget()
         else:
-            options_frame.pack(fill="x", padx=0, pady=5)
+            dropdown_canvas.pack(side="left", fill="both", expand=True, padx=0, pady=5)
+            scrollbar.pack(side="right", fill="y")
         dropdown_open.set(not dropdown_open.get())
 
-    # Populate dropdown options
+    # Populate options
     for i, pk in enumerate(pubkeys):
         def select_key(idx=i):
             selected_index.set(idx)
             selected_btn.config(text=f"Key {idx+1}: {truncate_pubkey(pubkeys[idx])} ▼")
-            key_label.config(text=truncate_pubkey(pubkeys[idx]))  # truncated display
+            key_label.config(text=truncate_pubkey(pubkeys[idx]))
             toggle_dropdown()
 
         btn = tk.Button(
@@ -456,9 +470,11 @@ def display_pubkeys(pubkeys):
             command=select_key
         )
         btn.pack(fill="x", pady=2)
+
         # Hover effect
         btn.bind("<Enter>", lambda e, b=btn: b.config(bg="#F3F4F6"))
         btn.bind("<Leave>", lambda e, b=btn: b.config(bg="white"))
+
 
 
 # --- Nocknames API Calls ---
