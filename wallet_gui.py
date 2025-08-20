@@ -1037,7 +1037,7 @@ def on_send():
 root = tk.Tk()
 root.title("Robinhood's Nockchain Wallet Pro Edition")
 root.geometry("1500x1000")
-root.configure(bg="#F9FAFB")
+root.configure(bg="#1F2937")
 header = tk.Frame(root, bg="#1F2937", height=60)
 header.pack(fill="x")
 header.pack_propagate(False)
@@ -1084,11 +1084,11 @@ btn_verify = ModernButton(header_buttons, text="🔍 Verify", command=open_verif
 btn_verify.pack(side="left", padx=2)
 
 # Main content area
-main_container = tk.Frame(root, bg="#F9FAFB")
+main_container = tk.Frame(root, bg="#1F2937")
 main_container.pack(fill="both", expand=True, padx=20, pady=20)
 
 # Left panel - Main content
-left_panel = tk.Frame(main_container, bg="#F9FAFB")
+left_panel = tk.Frame(main_container, bg="#1F2937")
 left_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
 # Pubkeys section
@@ -1105,7 +1105,7 @@ output_frame.pack(fill="both", expand=True)
 output_text = tk.Text(
     output_frame,
     bg="white",
-    fg="#374151",
+    fg="#1F2937",
     font=("Consolas", 9),
     relief="flat",
     bd=0,
