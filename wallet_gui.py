@@ -366,7 +366,7 @@ def show_notification(title, message):
     # Auto close after 2 seconds
     notification.after(2000, notification.destroy)
     
-def truncate_pubkey(key, start_chars=18, end_chars=18):
+def truncate_pubkey(key, start_chars=32, end_chars=32):
     """Shorten a public key for display purposes."""
     if len(key) <= start_chars + end_chars + 3:
         return key
@@ -512,7 +512,7 @@ def resolve_nockaddress(name):
         return None
 
 def open_check_balance_window():
-    win = create_modern_window("💰 Check Balance", 600, 250)
+    win = create_modern_window("🏦 Check Balance", 600, 250)
     
     # Header
     header_frame = tk.Frame(win, bg="#1F2937", height=60)
@@ -520,7 +520,7 @@ def open_check_balance_window():
     header_frame.pack_propagate(False)
     tk.Label(
         header_frame,
-        text="💰 Check Account Balance",
+        text="🏦 Check Account Balance",
         font=("Segoe UI", 14, "bold"),
         bg="#1F2937",
         fg="white"
@@ -553,7 +553,7 @@ def open_check_balance_window():
         # Show initial "Checking..." message in main GUI
         output_text.config(state='normal')
         output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"💰 Checking balance...\nAddress: {truncate_pubkey(pubkey)}\nPlease wait...\n\n")
+        output_text.insert(tk.END, f"🏦 Checking balance...\nAddress: {truncate_pubkey(pubkey)}\nPlease wait...\n\n")
         output_text.config(state='disabled')
         
         # Close popup immediately
@@ -597,7 +597,7 @@ def open_check_balance_window():
                     status_msg = "❌ Some Coins are Unspendable! Required signatures > 1 detected ❌"
                 
                 summary = f"\n{'='*50}\n"
-                summary += f"💰 BALANCE SUMMARY\n"
+                summary += f"🏦 BALANCE SUMMARY\n"
                 summary += f"{'='*50}\n"
                 summary += f"Total Assets: {total_assets:,} Nicks\n"
                 summary += f"Equivalent: ~{nocks:,.4f} Nocks\n"
@@ -647,7 +647,7 @@ def open_nocknames_window():
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)
     
     # Address to Name section
-    addr_frame = ModernFrame(main_frame, title="🔍 Resolve Name from Address")
+    addr_frame = ModernFrame(main_frame, title="🔏 Resolve Name from Address")
     addr_frame.pack(fill="x", pady=(0, 15))
     
     tk.Label(addr_frame, text="Wallet Address", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
@@ -668,7 +668,7 @@ def open_nocknames_window():
             return
         addr_result.config(state='normal')
         addr_result.delete('1.0', tk.END)
-        addr_result.insert(tk.END, "🔍 Resolving...")
+        addr_result.insert(tk.END, "🔏 Resolving...")
         addr_result.config(state='disabled')
 
         def worker():
@@ -683,11 +683,11 @@ def open_nocknames_window():
 
         threading.Thread(target=worker, daemon=True).start()
     
-    resolve_addr_btn = ModernButton(addr_input_frame, text="🔍 Resolve", command=resolve_address, style="secondary")
+    resolve_addr_btn = ModernButton(addr_input_frame, text="🔏 Resolve", command=resolve_address, style="secondary")
     resolve_addr_btn.pack(side="right")
     
     # Name to Address section
-    name_frame = ModernFrame(main_frame, title="🔍 Resolve Address from Name")
+    name_frame = ModernFrame(main_frame, title="🔏 Resolve Address from Name")
     name_frame.pack(fill="x")
     
     tk.Label(name_frame, text="Nockname", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
@@ -708,7 +708,7 @@ def open_nocknames_window():
             return
         name_result.config(state='normal')
         name_result.delete('1.0', tk.END)
-        name_result.insert(tk.END, "🔍 Resolving...")
+        name_result.insert(tk.END, "🔏 Resolving...")
         name_result.config(state='disabled')
 
         def worker():
@@ -723,11 +723,11 @@ def open_nocknames_window():
 
         threading.Thread(target=worker, daemon=True).start()
     
-    resolve_name_btn = ModernButton(name_input_frame, text="🔍 Resolve", command=resolve_name, style="secondary")
+    resolve_name_btn = ModernButton(name_input_frame, text="🔏 Resolve", command=resolve_name, style="secondary")
     resolve_name_btn.pack(side="right")
 
 def open_sign_message_window():
-    win = create_modern_window("✍️ Sign Message", 600, 350)
+    win = create_modern_window("📝 Sign Message", 600, 350)
     
     # Header
     header_frame = tk.Frame(win, bg="#1F2937", height=60)
@@ -736,7 +736,7 @@ def open_sign_message_window():
     
     tk.Label(
         header_frame,
-        text="✍️ Digital Message Signing",
+        text="📝 Digital Message Signing",
         font=("Segoe UI", 14, "bold"),
         bg="#1F2937",
         fg="white"
@@ -773,7 +773,7 @@ def open_sign_message_window():
 
         output_text.config(state='normal')
         output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"✍️ Signing message...\n")
+        output_text.insert(tk.END, f"📝 Signing message...\n")
         output_text.insert(tk.END, f"Message: {message[:100]}{'...' if len(message) > 100 else ''}\n\n")
         output_text.insert(tk.END, "Processing digital signature...\n")
         output_text.config(state='disabled')
@@ -810,11 +810,11 @@ def open_sign_message_window():
         update_output_text(output_text, q)
         win.destroy()
 
-    sign_btn = ModernButton(content, text="✍️ Sign Message", command=sign_message)
+    sign_btn = ModernButton(content, text="📝 Sign Message", command=sign_message)
     sign_btn.pack(padx=20, pady=10)
 
 def open_verify_message_window():
-    win = create_modern_window("🔍 Verify Message", 700, 500)
+    win = create_modern_window("🔏 Verify Message", 700, 500)
     
     # Header
     header_frame = tk.Frame(win, bg="#1F2937", height=60)
@@ -823,7 +823,7 @@ def open_verify_message_window():
     
     tk.Label(
         header_frame,
-        text="🔍 Digital Signature Verification",
+        text="🔏 Digital Signature Verification",
         font=("Segoe UI", 14, "bold"),
         bg="#1F2937",
         fg="white"
@@ -889,7 +889,7 @@ def open_verify_message_window():
 
         output_text.config(state='normal')
         output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"🔍 Verifying digital signature...\n")
+        output_text.insert(tk.END, f"🔏 Verifying digital signature...\n")
         output_text.insert(tk.END, f"Message: {message[:50]}{'...' if len(message) > 50 else ''}\n")
         output_text.insert(tk.END, f"Signature file: {sig_file}\n")
         output_text.insert(tk.END, f"Public key: {truncate_pubkey(pubkey)}\n\n")
@@ -941,7 +941,7 @@ def open_verify_message_window():
         update_output_text(output_text, q)
         win.destroy()
 
-    verify_btn = ModernButton(content, text="🔍 Verify Signature", command=verify_message)
+    verify_btn = ModernButton(content, text="🔏 Verify Signature", command=verify_message)
     verify_btn.pack(padx=20, pady=10)
 
 def on_get_pubkeys():
@@ -1071,16 +1071,16 @@ header_buttons.pack(side="right")
 btn_get_pubkeys = ModernButton(header_buttons, text="🔑 Get Pubkeys", command=on_get_pubkeys)
 btn_get_pubkeys.pack(side="left", padx=2)
 
-btn_check_balance = ModernButton(header_buttons, text="💰 Balance", command=open_check_balance_window, style="secondary")
+btn_check_balance = ModernButton(header_buttons, text="🏦 Balance", command=open_check_balance_window, style="secondary")
 btn_check_balance.pack(side="left", padx=2)
 
 btn_nocknames = ModernButton(header_buttons, text="🌐 Names", command=open_nocknames_window, style="secondary")
 btn_nocknames.pack(side="left", padx=2)
 
-btn_sign = ModernButton(header_buttons, text="✍️ Sign", command=open_sign_message_window, style="secondary")
+btn_sign = ModernButton(header_buttons, text="📝 Sign", command=open_sign_message_window, style="secondary")
 btn_sign.pack(side="left", padx=2)
 
-btn_verify = ModernButton(header_buttons, text="🔍 Verify", command=open_verify_message_window, style="secondary")
+btn_verify = ModernButton(header_buttons, text="🔏 Verify", command=open_verify_message_window, style="secondary")
 btn_verify.pack(side="left", padx=2)
 
 # Main content area
