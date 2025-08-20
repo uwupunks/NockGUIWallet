@@ -270,9 +270,11 @@ def get_price():
         return price, change_24h
     except Exception:
         return 0.000123, 2.45  # Mock data
-
+        
+# Remove ANSI escape sequences
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
+# -------------------- PUBKEY PARSER -------------------- #
 def get_pubkeys():
     try:
         proc = subprocess.Popen(
@@ -283,35 +285,29 @@ def get_pubkeys():
         )
 
         pubkeys = []
-        in_keys_section = False
         collecting_key = False
         current_key_lines = []
 
         for raw_line in proc.stdout:
             line = ANSI_ESCAPE.sub('', raw_line).strip()
-
-            if not in_keys_section:
-                if line.lower().startswith("public keys"):
-                    in_keys_section = True
+            if not line:
                 continue
 
-            if not line or line.startswith('―'):
-                continue
-
-            m = re.match(r"^\s*[-–—]\s*Public\s+Key\s*:\s*(.*)$", line, re.IGNORECASE)
-            if m:
-                key_part = m.group(1).strip()
+            if line.startswith("- Public Key:"):
+                key_part = line[len("- Public Key:"):].strip().strip("'")
                 if key_part:
-                    pubkeys.append(key_part.strip("'").replace(" ", ""))
+                    # Single-line key
+                    pubkeys.append(key_part.replace(" ", ""))
                     collecting_key = False
                     current_key_lines = []
                 else:
+                    # Multi-line key
                     collecting_key = True
                     current_key_lines = []
                 continue
 
-            if collecting_key and re.match(r"^\s*[-–—]\s*Chain\s+Code\s*:", line, re.IGNORECASE):
-                key = ''.join(current_key_lines).replace(" ", "")
+            if collecting_key and line.startswith("- Chain Code:"):
+                key = ''.join(current_key_lines).replace(" ", "").strip("'")
                 if key:
                     pubkeys.append(key)
                 collecting_key = False
@@ -319,11 +315,11 @@ def get_pubkeys():
                 continue
 
             if collecting_key:
-                if line:
-                    current_key_lines.append(line.strip("'").strip())
+                current_key_lines.append(line.strip("'").strip())
 
+        # In case the last key was not followed by a chain code
         if collecting_key and current_key_lines:
-            key = ''.join(current_key_lines).replace(" ", "")
+            key = ''.join(current_key_lines).replace(" ", "").strip("'")
             if key:
                 pubkeys.append(key)
 
@@ -369,76 +365,101 @@ def show_notification(title, message):
     
     # Auto close after 2 seconds
     notification.after(2000, notification.destroy)
-
+    
+def truncate_pubkey(key, start_chars=12, end_chars=12):
+    """Shorten a public key for display purposes."""
+    if len(key) <= start_chars + end_chars + 3:
+        return key
+    return f"{key[:start_chars]}...{key[-end_chars:]}"
+    
 def display_pubkeys(pubkeys):
     for widget in pubkeys_content.winfo_children():
         widget.destroy()
 
     if not pubkeys:
-        no_keys_frame = tk.Frame(pubkeys_content, bg="white")
-        no_keys_frame.pack(fill="x", pady=20)
-        
-        tk.Label(
-            no_keys_frame,
-            text="🔑 No public keys found",
-            font=("Segoe UI", 12),
+        tk.Label(pubkeys_content, text="🔑 No public keys found",
+                 font=("Segoe UI", 12), bg="white", fg="#6B7280").pack(pady=20)
+        return
+
+    # State variables
+    selected_index = tk.IntVar(value=0)
+    dropdown_open = tk.BooleanVar(value=False)
+
+    # Frame for dropdown
+    dropdown_frame = tk.Frame(pubkeys_content, bg="white", bd=1, relief="solid")
+    dropdown_frame.pack(fill="x", padx=10, pady=10)
+
+    # Button to toggle dropdown
+    selected_btn = tk.Button(
+        dropdown_frame,
+        text=f"Key 1: {truncate_pubkey(pubkeys[0])} ▼",
+        font=("Consolas", 10),
+        bg="white",
+        fg="#374151",
+        bd=0,
+        anchor="w",
+        command=lambda: toggle_dropdown()
+    )
+    selected_btn.pack(fill="x", padx=10, pady=5)
+
+    # Frame containing all key options
+    options_frame = tk.Frame(dropdown_frame, bg="white", bd=0)
+    options_frame.pack(fill="x", padx=10)
+    options_frame.pack_forget()  # initially hidden
+
+    # Copy button and display label
+    info_frame = tk.Frame(pubkeys_content, bg="white")
+    info_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+    key_label = tk.Label(
+        info_frame,
+        text=truncate_pubkey(pubkeys[0]),  # abbreviated display
+        font=("Consolas", 10),
+        bg="white",
+        fg="#374151"
+    )
+    key_label.pack(side="left", padx=(0, 10))
+
+    copy_btn = ModernButton(
+        info_frame,
+        text="📋 Copy",
+        style="secondary",
+        command=lambda: copy_to_clipboard(pubkeys[selected_index.get()])
+    )
+    copy_btn.pack(side="right")
+    copy_btn.config(width=80, height=35)
+
+    # Function to toggle dropdown visibility
+    def toggle_dropdown():
+        if dropdown_open.get():
+            options_frame.pack_forget()
+        else:
+            options_frame.pack(fill="x", padx=0, pady=5)
+        dropdown_open.set(not dropdown_open.get())
+
+    # Populate dropdown options
+    for i, pk in enumerate(pubkeys):
+        def select_key(idx=i):
+            selected_index.set(idx)
+            selected_btn.config(text=f"Key {idx+1}: {truncate_pubkey(pubkeys[idx])} ▼")
+            key_label.config(text=truncate_pubkey(pubkeys[idx]))  # truncated display
+            toggle_dropdown()
+
+        btn = tk.Button(
+            options_frame,
+            text=f"Key {i+1}: {truncate_pubkey(pk)}",
+            font=("Consolas", 10),
             bg="white",
-            fg="#6B7280"
-        ).pack()
-        
-        tk.Label(
-            no_keys_frame,
-            text="Click 'Get Pubkeys' to fetch your keys",
-            font=("Segoe UI", 10),
-            bg="white",
-            fg="#9CA3AF"
-        ).pack(pady=(5, 0))
-    else:
-        for i, pubkey in enumerate(pubkeys):
-            # Key container with hover effect
-            key_frame = tk.Frame(
-                pubkeys_content,
-                bg="white",
-                relief="flat",
-                bd=1,
-                highlightbackground="#E5E7EB",
-                highlightthickness=1
-            )
-            key_frame.pack(fill="x", pady=5, padx=10)
-            
-            # Key content
-            content_frame = tk.Frame(key_frame, bg="white")
-            content_frame.pack(fill="both", expand=True, padx=15, pady=12)
-            
-            # Key icon and text
-            left_frame = tk.Frame(content_frame, bg="white")
-            left_frame.pack(side="left", fill="both", expand=True)
-            
-            tk.Label(
-                left_frame,
-                text="🔑",
-                font=("Segoe UI", 16),
-                bg="white"
-            ).pack(side="left")
-            
-            key_label = tk.Label(
-                left_frame,
-                text=f"Key {i+1}: {truncate_pubkey(pubkey)}",
-                font=("Consolas", 10),
-                bg="white",
-                fg="#374151"
-            )
-            key_label.pack(side="left", padx=(10, 0))
-            
-            # Copy button
-            copy_btn = ModernButton(
-                content_frame,
-                text="📋 Copy",
-                command=lambda pk=pubkey: copy_to_clipboard(pk),
-                style="secondary"
-            )
-            copy_btn.pack(side="right")
-            copy_btn.config(width=80, height=35)
+            fg="#374151",
+            bd=0,
+            anchor="w",
+            command=select_key
+        )
+        btn.pack(fill="x", pady=2)
+        # Hover effect
+        btn.bind("<Enter>", lambda e, b=btn: b.config(bg="#F3F4F6"))
+        btn.bind("<Leave>", lambda e, b=btn: b.config(bg="white"))
+
 
 # --- Nocknames API Calls ---
 
