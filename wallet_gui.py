@@ -1005,7 +1005,7 @@ def on_send():
     def run_send():
         try:
             proc = subprocess.Popen(
-                ["./sendsimple.sh", "--nockchain-socket", SOCKET_PATH],
+                ["bash", "./sendsimple.sh", "--nockchain-socket", SOCKET_PATH],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
