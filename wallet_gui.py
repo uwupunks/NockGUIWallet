@@ -1,7 +1,7 @@
 import os
 import sys
 import tkinter as tk
-from tkinter import ttk, Toplevel, messagebox, filedialog
+from tkinter import ttk, Toplevel, messagebox, filedialog, simpledialog
 import threading
 import subprocess
 import queue
@@ -271,6 +271,175 @@ def get_price():
     except Exception:
         return 0.000123, 2.45  # Mock data
         
+# --- Create Wallet ---
+
+def on_create_wallet():
+    # Ask user before overwriting wallet
+    confirm = messagebox.askyesno(
+        "Confirm Wallet Creation",
+        "Are you sure you want to create a new wallet?\nYour current wallet will be deleted."
+    )
+    if not confirm:
+        print_to_output("Wallet creation canceled by user.")
+        return
+
+    # Clear old logs
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.config(state='disabled')
+
+    print_to_output("Creating new wallet...")
+
+    # Start background worker
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def worker():
+    try:
+        proc = subprocess.Popen(
+            ["nockchain-wallet", "keygen"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+
+        capture_next = False  # track if we should capture the next line
+
+        for line in proc.stdout:
+            clean_line = ANSI_ESCAPE.sub("", line).strip()
+            if not clean_line:
+                continue
+
+            # filter out noisy logs
+            if "kernel::boot" in clean_line or "Tracy" in clean_line:
+                continue
+
+            # if line is a key label -> print it and capture next line
+            if any(k in clean_line for k in [
+                "Public Key", "Private Key", "Chain Code",
+                "Import Private Key", "Import Public Key", "Seed Phrase"
+            ]):
+                root.after(0, print_to_output, clean_line)
+                capture_next = True
+                continue
+
+            # if last line was a label, this is its value
+            if capture_next:
+                root.after(0, print_to_output, clean_line)
+                capture_next = False
+                continue
+
+        proc.stdout.close()
+        proc.wait()
+        root.after(0, print_to_output, "✅ Wallet created successfully!")
+        root.after(0, lambda: messagebox.showinfo("Wallet Created", "Wallet created successfully."))
+
+    except Exception as e:
+        root.after(0, print_to_output, f"❌ Error creating wallet: {e}")
+        root.after(0, lambda: messagebox.showerror("Error", f"Failed to create wallet:\n{e}"))
+        
+# -- Create Children ---
+
+def on_derive_children():
+    # Ask user how many children to derive
+    num_children = simpledialog.askinteger(
+        "Derive Child Keys", "How many child keys would you like to derive?",
+        minvalue=1, maxvalue=100
+    )
+    if not num_children:
+        output_text.config(state='normal')
+        output_text.insert(tk.END, "Child key derivation canceled.\n")
+        output_text.config(state='disabled')
+        return
+
+    # Clear previous log and show starting message
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, f"🧬 Deriving {num_children} child key(s)...\n\n")
+    output_text.config(state='disabled')
+
+    def worker():
+        for i in range(num_children):
+            # Show deriving child key message
+            output_text.config(state='normal')
+            output_text.insert(tk.END, f"➡️ Deriving child key {i}...\n")
+            output_text.see(tk.END)
+            output_text.config(state='disabled')
+
+            # Run nockchain-wallet derive-child command
+            try:
+                subprocess.run(
+                    ["nockchain-wallet", "derive-child", str(i)],
+                    capture_output=True, text=True, check=True
+                )
+            except subprocess.CalledProcessError as e:
+                output_text.config(state='normal')
+                output_text.insert(tk.END, f"❌ Error deriving child {i}: {e.stderr}\n")
+                output_text.config(state='disabled')
+
+        # Success message
+        output_text.config(state='normal')
+        output_text.insert(tk.END, "\n✅ Children created successfully! Get pubkeys to view.\n")
+        output_text.config(state='disabled')
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+    
+# --- Export Keys ---
+
+def on_export_keys():
+    # Clear previous logs
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, "✨ Exporting wallet keys...\n")
+    output_text.config(state='disabled')
+
+    def worker():
+        try:
+            proc = subprocess.Popen(
+                ["nockchain-wallet", "export-keys"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+
+            export_path = "keys.export"  # fallback default
+
+            for raw_line in proc.stdout:
+                line = ANSI_ESCAPE.sub("", raw_line).strip()
+                if not line:
+                    continue
+
+                # Ignore kernel boot messages
+                if "kernel::boot" in line or "Tracy tracing" in line:
+                    continue
+
+                # Extract export path
+                if "Path:" in line:
+                    export_path = line.split("Path:")[-1].strip(" '")
+                    root.after(0, print_to_output, f"📂 Keys exported to: {export_path}")
+                    continue
+
+            proc.stdout.close()
+            proc.wait()
+
+            # Final success message
+            root.after(0, print_to_output, "✅ Wallet keys exported successfully inside Nockchain folder!")
+            root.after(0, lambda: messagebox.showinfo(
+                "Keys Exported", 
+                f"Wallet keys exported successfully to:\n{export_path}"
+            ))
+
+        except Exception as e:
+            root.after(0, print_to_output, f"❌ Error exporting keys: {e}")
+            root.after(0, lambda: messagebox.showerror("Error", f"Failed to export keys:\n{e}"))
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
 # Remove ANSI escape sequences
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
@@ -1067,6 +1236,15 @@ tk.Label(
 # Action buttons in header
 header_buttons = tk.Frame(header_content, bg="#1F2937")
 header_buttons.pack(side="right")
+
+btn_create_wallet = ModernButton(header_buttons, text="✨ Create Wallet", command=on_create_wallet, style="secondary")
+btn_create_wallet.pack(side="left", padx=2)
+
+btn_derive_children = ModernButton(header_buttons, text="🧬 Derive Children", command=on_derive_children, style="secondary")
+btn_derive_children.pack(side="left", padx=2)
+
+btn_export_keys = ModernButton(header_buttons, text="💾 Export Keys", command=on_export_keys, style="secondary")
+btn_export_keys.pack(side="left", padx=2)
 
 btn_get_pubkeys = ModernButton(header_buttons, text="🔑 Get Pubkeys", command=on_get_pubkeys)
 btn_get_pubkeys.pack(side="left", padx=2)
