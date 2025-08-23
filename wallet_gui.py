@@ -438,6 +438,79 @@ def on_export_keys():
             root.after(0, lambda: messagebox.showerror("Error", f"Failed to export keys:\n{e}"))
 
     threading.Thread(target=worker, daemon=True).start()
+    
+# --- Import Keys ---
+
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import subprocess
+import threading
+import re
+
+# ANSI escape code remover
+ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+
+def print_to_output(text):
+    output_text.config(state='normal')
+    output_text.insert(tk.END, text + "\n")
+    output_text.see(tk.END)
+    output_text.config(state='disabled')
+
+def on_import_keys():
+    file_path = filedialog.askopenfilename(
+        title="Select Keys File",
+        filetypes=[("Export Files", "*.export")]
+    )
+
+    if not file_path:
+        return
+
+    # Clear previous logs and show starting message
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, f"📂 Loading Wallet from:\n{file_path}\n\n")
+    output_text.insert(tk.END, "⏳ Importing keys, please wait...\n")
+    output_text.config(state='disabled')
+
+    def worker():
+        try:
+            process = subprocess.Popen(
+                ["nockchain-wallet", "import-keys", "--file", file_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            # Stream stdout
+            for line in process.stdout:
+                clean_line = ansi_escape.sub('', line.strip())
+                if clean_line:
+                    # Ignore kernel boot messages
+                    if clean_line.startswith("I [") and "kernel::boot" in clean_line:
+                        continue
+                    root.after(0, print_to_output, clean_line)
+
+            # Stream stderr
+            for line in process.stderr:
+                clean_line = ansi_escape.sub('', line.strip())
+                if clean_line:
+                    root.after(0, print_to_output, clean_line)
+
+            return_code = process.wait()
+
+            # Check return code for success
+            if return_code == 0:
+                root.after(0, print_to_output, "\n✅ Keys imported successfully!")
+                root.after(0, lambda: messagebox.showinfo("Success", "Keys imported successfully!"))
+            else:
+                root.after(0, print_to_output, "\n❌ Failed to import keys. See log above.")
+                root.after(0, lambda: messagebox.showerror("Error", "Failed to import keys."))
+
+        except Exception as e:
+            root.after(0, print_to_output, f"\n❌ Error importing keys: {e}")
+            root.after(0, lambda: messagebox.showerror("Error", f"An error occurred:\n{e}"))
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 # Remove ANSI escape sequences
@@ -1205,7 +1278,7 @@ def on_send():
 # Header
 root = tk.Tk()
 root.title("Robinhood's Nockchain Wallet Pro Edition")
-root.geometry("1600x1200")
+root.geometry("1800x1200")
 root.configure(bg="#1F2937")
 header = tk.Frame(root, bg="#1F2937", height=60)
 header.pack(fill="x")
@@ -1214,34 +1287,19 @@ header.pack_propagate(False)
 header_content = tk.Frame(header, bg="#1F2937")
 header_content.pack(fill="both", expand=True, padx=30, pady=15)
 
-# Logo and title
-logo_frame = tk.Frame(header_content, bg="#1F2937")
-logo_frame.pack(side="left")
-
-tk.Label(
-    logo_frame,
-    text="💎",
-    font=("Segoe UI", 20),
-    bg="#1F2937"
-).pack(side="left")
-
-tk.Label(
-    logo_frame,
-    text="Robinhood's Nockchain Wallet Pro",
-    font=("Segoe UI", 16, "bold"),
-    bg="#1F2937",
-    fg="white"
-).pack(side="left", padx=(10, 0))
-
 # Action buttons in header
 header_buttons = tk.Frame(header_content, bg="#1F2937")
-header_buttons.pack(side="right")
+header_buttons.pack(side="top", pady=0)        # pack it at the top
+header_buttons.place(relx=0.5, rely=0.5, anchor="center")  # center it
 
 btn_create_wallet = ModernButton(header_buttons, text="✨ Create Wallet", command=on_create_wallet, style="secondary")
 btn_create_wallet.pack(side="left", padx=2)
 
 btn_derive_children = ModernButton(header_buttons, text="🧬 Derive Children", command=on_derive_children, style="secondary")
 btn_derive_children.pack(side="left", padx=2)
+
+btn_import_keys = ModernButton(header_buttons, text="📂 Import Keys", command=on_import_keys, style="secondary")
+btn_import_keys.pack(side="left", padx=2)
 
 btn_export_keys = ModernButton(header_buttons, text="💾 Export Keys", command=on_export_keys, style="secondary")
 btn_export_keys.pack(side="left", padx=2)
