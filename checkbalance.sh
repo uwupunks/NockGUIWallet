@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SOCKET="$HOME/nockchain/.socket/nockchain_npc.sock"
+GRPC_ADDRESS="http://localhost:5555"
 
 read -p "Enter pubkey: " PUBKEY
 
@@ -18,9 +18,9 @@ if [[ -f "$CSV_FILE" ]]; then
   rm -f "$CSV_FILE"
 fi
 
-# Generate new CSV (suppress output from wallet command)
+# Generate new CSV using gRPC address (suppress output)
 echo "📄 Generating new CSV file for pubkey: $PUBKEY"
-nockchain-wallet --nockchain-socket "$SOCKET" list-notes-by-pubkey-csv "$PUBKEY" > /dev/null 2>&1
+nockchain-wallet --grpc-address "$GRPC_ADDRESS" list-notes-by-pubkey-csv "$PUBKEY" > /dev/null 2>&1
 
 # Wait briefly for file creation
 sleep 1
@@ -63,4 +63,3 @@ echo
 echo "💰 Total balance for pubkey: $PUBKEY"
 echo "  $TOTAL_NICKS Nicks"
 echo "  ≈ $TOTAL_NOCKS Nocks (decimal)"
-
