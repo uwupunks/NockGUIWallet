@@ -1,5 +1,6 @@
 import os
 import sys
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, Toplevel, messagebox, filedialog, simpledialog
 import threading
@@ -889,7 +890,7 @@ def open_nocknames_window():
     
     tk.Label(
         header_content,
-        text="🌐 Nocknames Resolution Service",
+        text="👨 Nocknames Resolution Service",
         font=("Segoe UI", 14, "bold"),
         bg="#1F2937",
         fg="white"
@@ -898,7 +899,7 @@ def open_nocknames_window():
     register_btn = ModernButton(
         header_content, 
         text="Register New",
-        command=lambda: __import__('webbrowser').open("https://nocknames.com"),
+        command=lambda: webbrowser.open_new_tab("https://nocknames.com"),
         style="success"
     )
     register_btn.pack(side="right")
@@ -1221,7 +1222,7 @@ def on_get_pubkeys():
                 for i, pk in enumerate(pubkeys, 1):
                     output_text.insert(tk.END, f"   {i}. {pk}\n")
             output_text.config(state='disabled')
-            btn_get_pubkeys.button.config(text="Get Pubkeys")
+            btn_get_pubkeys.button.config(text="🔑 Get Pubkeys")
             btn_get_pubkeys.set_enabled(True)
         root.after(0, update_ui)
 
@@ -1294,7 +1295,7 @@ def on_send():
 # Header
 root = tk.Tk()
 root.title("Robinhood's Nockchain Wallet Pro Edition")
-root.geometry("1800x1200")
+root.geometry("1920x1080")
 root.configure(bg="#1F2937")
 header = tk.Frame(root, bg="#1F2937", height=60)
 header.pack(fill="x")
@@ -1326,7 +1327,7 @@ btn_get_pubkeys.pack(side="left", padx=2)
 btn_check_balance = ModernButton(header_buttons, text="🏦 Balance", command=open_check_balance_window, style="secondary")
 btn_check_balance.pack(side="left", padx=2)
 
-btn_nocknames = ModernButton(header_buttons, text="🌐 Names", command=open_nocknames_window, style="secondary")
+btn_nocknames = ModernButton(header_buttons, text="👨 Names", command=open_nocknames_window, style="secondary")
 btn_nocknames.pack(side="left", padx=2)
 
 btn_sign = ModernButton(header_buttons, text="📝 Sign", command=open_sign_message_window, style="secondary")
@@ -1372,9 +1373,77 @@ scrollbar.pack(side="right", fill="y")
 output_text.config(yscrollcommand=scrollbar.set)
 scrollbar.config(command=output_text.yview)
 
-# Right panel - Send Transaction only
-right_panel = tk.Frame(main_container, bg="#F9FAFB")
-right_panel.pack(side="right", fill="y", padx=(10, 0))
+# Create a right-side container to hold multiple sections
+right_side = tk.Frame(main_container, bg="#F3F4F6")
+right_side.pack(side="right", fill="y", padx=(10, 0))
+
+# --- Send Transaction Panel ---
+right_panel = tk.Frame(right_side, bg="#F9FAFB")
+right_panel.pack(fill="x", pady=(0,5))  \
+
+# --- Directly below ---
+below_panel = tk.Frame(right_side, bg="#F9FAFB")
+below_panel.pack(fill="x", pady=(0,5))
+
+tk.Label(
+    below_panel,
+    text="📡 Block Explorers",
+    bg="#F9FAFB",
+    font=("Segoe UI", 13, "bold")
+).pack(pady=20) \
+
+btn_explorer = ModernButton(below_panel, text="🌐 NockBlocks", command=lambda: webbrowser.open_new_tab("https://nockblocks.com"), style="secondary")
+btn_explorer.pack(pady=(0,10))
+
+# --- Directly below 2 ---
+below_panel = tk.Frame(right_side, bg="#F9FAFB")
+below_panel.pack(fill="x", pady=(0,5))
+
+tk.Label(
+    below_panel,
+    text="🛟 Mining Pools",
+    bg="#F9FAFB",
+    font=("Segoe UI", 13, "bold")
+).pack(pady=20) \
+
+btn_explorer = ModernButton(below_panel, text="🐬 NockPool", command=lambda: webbrowser.open_new_tab("https://nockpool.com"), style="secondary")
+btn_explorer.pack(pady=(0,10))
+
+# --- Directly below 3 ---
+below_panel = tk.Frame(right_side, bg="#F9FAFB")
+below_panel.pack(fill="x", pady=(0,5))
+
+tk.Label(
+    below_panel,
+    text="⛓️ Official Links",
+    bg="#F9FAFB",
+    font=("Segoe UI", 13, "bold")
+).pack(pady=20)
+
+# Container frame for buttons
+buttons_frame = tk.Frame(below_panel, bg="#F9FAFB")
+buttons_frame.pack(pady=(0,10))
+
+# GitHub button
+btn_github = ModernButton(
+    buttons_frame,
+    text="🧰 Github",
+    command=lambda: webbrowser.open_new_tab("https://github.com/zorp-corp/nockchain"),
+    style="secondary"
+)
+btn_github.pack(side="left", padx=5)
+
+# Website button
+btn_website = ModernButton(
+    buttons_frame,
+    text="🔗 Website",
+    command=lambda: webbrowser.open_new_tab("https://www.nockchain.org/"),
+    style="secondary"
+)
+btn_website.pack(side="left", padx=5)
+
+# Center the buttons_frame
+buttons_frame.pack(anchor="center")
 
 # Send Transaction Panel
 send_frame = ModernFrame(right_panel, title="Send Transaction")
@@ -1432,7 +1501,7 @@ output_text.insert(tk.END, f"Node Status: {node_status}\n\n")
 
 output_text.insert(
     "end", 
-    "💝 Donations : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
+    "💝 Donations 💝: 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
 )
 output_text.config(state='disabled')
 
