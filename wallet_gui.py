@@ -1361,10 +1361,10 @@ output_text.insert(tk.END, "Welcome to Robinhood's Nockchain Wallet Pro Edition!
 output_text.insert(tk.END, "─" * 50 + "\n")
 output_text.insert(tk.END, "Click 'Get Pubkeys' to load your public keys.\n\n")
 output_text.insert(tk.END, f"gRPC Address: {GRPC_ADDRESS}\n")
-output_text.insert(tk.END, f"Status: Ready\n")
+output_text.insert(tk.END, f"✅ Status: Ready\n")
 output_text.insert(
     "end", 
-    "Donate to Robinhood if you like the GUI : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
+    "💖 Donate to Robinhood if you like the GUI : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
 )
 output_text.config(state='disabled')
 
