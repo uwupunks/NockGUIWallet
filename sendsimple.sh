@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SOCKET=~/nockchain/.socket/nockchain_npc.sock
+GRPC_ADDRESS="http://localhost:5555"
 TXS_DIR="$(pwd)/txs"
 
 echo "========================================"
@@ -20,7 +20,7 @@ echo -e "\n➕ Total amount needed (gift + fee): $total\n"
 csvfile="notes-${sender}.csv"
 
 echo "📂 Exporting notes CSV, please wait..."
-if ! nockchain-wallet --nockchain-socket "$SOCKET" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
+if ! nockchain-wallet --grpc-address "$GRPC_ADDRESS" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
   echo "❌ Failed to export notes CSV. Please check your wallet and connection."
   exit 1
 fi
@@ -72,7 +72,7 @@ rm -f "$TXS_DIR"/*
 echo "🗑️ Folder cleaned."
 
 echo -e "\n🛠️ Creating draft transaction..."
-if ! nockchain-wallet --nockchain-socket "$SOCKET" create-tx \
+if ! nockchain-wallet --grpc-address "$GRPC_ADDRESS" create-tx \
   --names "$names_arg" \
   --recipients "$recipients_arg" \
   --gifts "$gift" \
@@ -92,9 +92,8 @@ fi
 echo "✅ Draft transaction created: $txfile"
 
 echo "🚀 Sending transaction..."
-if nockchain-wallet --nockchain-socket "$SOCKET" send-tx "$txfile" >/dev/null 2>&1; then
+if nockchain-wallet --grpc-address "$GRPC_ADDRESS" send-tx "$txfile" >/dev/null 2>&1; then
   echo "✅ Transaction sent successfully!"
 else
   echo "❌ Failed to send transaction."
 fi
-
