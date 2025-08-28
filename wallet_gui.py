@@ -155,6 +155,16 @@ class StatusBar(tk.Frame):
         )
         self.change_label.pack(side="left", padx=(10, 0))
         
+        # Connection status
+        self.connection_label = tk.Label(
+            self,
+            text="gRPC: http://localhost:5555 ✅",
+            font=("Segoe UI", 9),
+            bg="#1F2937",
+            fg="#10B981"
+        )
+        self.connection_label.pack(side="left", padx=20)
+        
         # Time
         self.time_label = tk.Label(
             self,
@@ -184,45 +194,8 @@ class StatusBar(tk.Frame):
         
         self.after(60000, self.update_price)  # Update every minute
 
-# --- Original utility functions with enhancements ---
-
-def detect_socket_path():
-    socket_path = os.environ.get("NOCKCHAIN_SOCKET")
-    if socket_path and os.path.exists(socket_path):
-        return socket_path
-
-    home = os.path.expanduser("~")
-    candidates = [
-        os.path.join(home, ".nockchain", ".socket", "nockchain_npc.sock"),
-        os.path.join(home, "nockchain", ".socket", "nockchain_npc.sock"),
-        os.path.join(home, "nockchain", "socket", "nockchain_npc.sock"),
-        "/tmp/nockchain_npc.sock",
-    ]
-
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-
-    for root_dir, dirs, files in os.walk(home):
-        if "nockchain_npc.sock" in files:
-            return os.path.join(root_dir, "nockchain_npc.sock")
-
-    return None
-
-SOCKET_PATH = detect_socket_path()
-
-if SOCKET_PATH is None:
-    tk.Tk().withdraw()
-    messagebox.showerror(
-        "Error",
-        "Nockchain socket path not found.\n"
-        "Please set NOCKCHAIN_SOCKET environment variable or place socket in a default location:\n"
-        "~/.nockchain/.socket/nockchain_npc.sock\n"
-        "~/nockchain/.socket/nockchain_npc.sock\n"
-        "~/nockchain/socket/nockchain_npc.sock\n"
-        "/tmp/nockchain_npc.sock"
-    )
-    sys.exit(1)
+# --- gRPC Configuration ---
+GRPC_ADDRESS = "http://localhost:5555"
 
 def create_modern_window(title, width, height):
     """Helper function to create modern styled windows"""
@@ -297,7 +270,7 @@ def on_create_wallet():
 def worker():
     try:
         proc = subprocess.Popen(
-            ["nockchain-wallet", "keygen"],
+            ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "keygen"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -370,7 +343,7 @@ def on_derive_children():
             # Run nockchain-wallet derive-child command
             try:
                 subprocess.run(
-                    ["nockchain-wallet", "derive-child", str(i)],
+                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "derive-child", str(i)],
                     capture_output=True, text=True, check=True
                 )
             except subprocess.CalledProcessError as e:
@@ -385,7 +358,6 @@ def on_derive_children():
 
     threading.Thread(target=worker, daemon=True).start()
 
-
     
 # --- Export Keys ---
 
@@ -399,7 +371,7 @@ def on_export_keys():
     def worker():
         try:
             proc = subprocess.Popen(
-                ["nockchain-wallet", "export-keys"],
+                ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "export-keys"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -441,20 +413,8 @@ def on_export_keys():
     
 # --- Import Keys ---
 
-import tkinter as tk
-from tkinter import filedialog, messagebox
-import subprocess
-import threading
-import re
-
 # ANSI escape code remover
 ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
-
-def print_to_output(text):
-    output_text.config(state='normal')
-    output_text.insert(tk.END, text + "\n")
-    output_text.see(tk.END)
-    output_text.config(state='disabled')
 
 def on_import_keys():
     file_path = filedialog.askopenfilename(
@@ -475,7 +435,7 @@ def on_import_keys():
     def worker():
         try:
             process = subprocess.Popen(
-                ["nockchain-wallet", "import-keys", "--file", file_path],
+                ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "import-keys", "--file", file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -520,7 +480,7 @@ ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 def get_pubkeys():
     try:
         proc = subprocess.Popen(
-            ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH, "list-pubkeys"],
+            ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "list-pubkeys"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True
@@ -718,7 +678,6 @@ def display_pubkeys(pubkeys):
         btn.bind("<Leave>", lambda e, b=btn: b.config(bg="white"))
 
 
-
 # --- Nocknames API Calls ---
 
 def resolve_nockname(address):
@@ -754,7 +713,7 @@ def resolve_nockaddress(name):
         return None
 
 def open_check_balance_window():
-    win = create_modern_window("🏦 Check Balance", 600, 250)
+    win = create_modern_window("Check Balance", 600, 250)
     
     # Header
     header_frame = tk.Frame(win, bg="#1F2937", height=60)
@@ -762,7 +721,7 @@ def open_check_balance_window():
     header_frame.pack_propagate(False)
     tk.Label(
         header_frame,
-        text="🏦 Check Account Balance",
+        text="Check Account Balance",
         font=("Segoe UI", 14, "bold"),
         bg="#1F2937",
         fg="white"
@@ -789,13 +748,13 @@ def open_check_balance_window():
             messagebox.showerror("Input Error", "Please enter a public key.")
             return
         if not re.fullmatch(r"[A-Za-z0-9]+", pubkey):
-            messagebox.showerror("Input Error", "❌ Invalid pubkey format. Only alphanumeric characters allowed.")
+            messagebox.showerror("Input Error", "Invalid pubkey format. Only alphanumeric characters allowed.")
             return
         
         # Show initial "Checking..." message in main GUI
         output_text.config(state='normal')
         output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"🏦 Checking balance...\nAddress: {truncate_pubkey(pubkey)}\nPlease wait...\n\n")
+        output_text.insert(tk.END, f"Checking balance...\nAddress: {truncate_pubkey(pubkey)}\nPlease wait...\n\n")
         output_text.config(state='disabled')
         
         # Close popup immediately
@@ -807,7 +766,7 @@ def open_check_balance_window():
         def run_check_balance():
             try:
                 proc = subprocess.Popen(
-                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH, "list-notes-by-pubkey", pubkey],
+                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "list-notes-by-pubkey", pubkey],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -832,14 +791,14 @@ def open_check_balance_window():
                 nocks = total_assets / 65536
                 
                 if not required_sigs_list:
-                    status_msg = "ℹ️ No 'Required Signatures' info found in notes.\n"
+                    status_msg = "No 'Required Signatures' info found in notes.\n"
                 elif all(m == 1 for m in required_sigs_list):
-                    status_msg = "✅ Coins are Spendable! All required signatures = 1"
+                    status_msg = "Coins are Spendable! All required signatures = 1"
                 else:
-                    status_msg = "❌ Some Coins are Unspendable! Required signatures > 1 detected ❌"
+                    status_msg = "Some Coins are Unspendable! Required signatures > 1 detected"
                 
                 summary = f"\n{'='*50}\n"
-                summary += f"🏦 BALANCE SUMMARY\n"
+                summary += f"BALANCE SUMMARY\n"
                 summary += f"{'='*50}\n"
                 summary += f"Total Assets: {total_assets:,} Nicks\n"
                 summary += f"Equivalent: ~{nocks:,.4f} Nocks\n"
@@ -847,7 +806,7 @@ def open_check_balance_window():
                 
                 main_q.put(summary)
             except Exception as e:
-                main_q.put(f"❌ Error checking balance: {e}\n")
+                main_q.put(f"Error checking balance: {e}\n")
             finally:
                 main_q.put(None)
         
@@ -858,7 +817,7 @@ def open_check_balance_window():
     check_btn.pack(side="right")
 
 def open_nocknames_window():
-    win = create_modern_window("🌐 Nocknames", 800, 600)
+    win = create_modern_window("Nocknames", 800, 600)
     
     # Header
     header_frame = tk.Frame(win, bg="#1F2937", height=60)
@@ -878,7 +837,7 @@ def open_nocknames_window():
     
     register_btn = ModernButton(
         header_content, 
-        text="🔗 Register New",
+        text="Register New",
         command=lambda: __import__('webbrowser').open("https://nocknames.com"),
         style="success"
     )
@@ -889,7 +848,7 @@ def open_nocknames_window():
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)
     
     # Address to Name section
-    addr_frame = ModernFrame(main_frame, title="🔏 Resolve Name from Address")
+    addr_frame = ModernFrame(main_frame, title="Resolve Name from Address")
     addr_frame.pack(fill="x", pady=(0, 15))
     
     tk.Label(addr_frame, text="Wallet Address", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
@@ -910,7 +869,7 @@ def open_nocknames_window():
             return
         addr_result.config(state='normal')
         addr_result.delete('1.0', tk.END)
-        addr_result.insert(tk.END, "🔏 Resolving...")
+        addr_result.insert(tk.END, "Resolving...")
         addr_result.config(state='disabled')
 
         def worker():
@@ -925,11 +884,11 @@ def open_nocknames_window():
 
         threading.Thread(target=worker, daemon=True).start()
     
-    resolve_addr_btn = ModernButton(addr_input_frame, text="🔏 Resolve", command=resolve_address, style="secondary")
+    resolve_addr_btn = ModernButton(addr_input_frame, text="Resolve", command=resolve_address, style="secondary")
     resolve_addr_btn.pack(side="right")
     
     # Name to Address section
-    name_frame = ModernFrame(main_frame, title="🔏 Resolve Address from Name")
+    name_frame = ModernFrame(main_frame, title="Resolve Address from Name")
     name_frame.pack(fill="x")
     
     tk.Label(name_frame, text="Nockname", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
@@ -950,7 +909,7 @@ def open_nocknames_window():
             return
         name_result.config(state='normal')
         name_result.delete('1.0', tk.END)
-        name_result.insert(tk.END, "🔏 Resolving...")
+        name_result.insert(tk.END, "Resolving...")
         name_result.config(state='disabled')
 
         def worker():
@@ -965,17 +924,17 @@ def open_nocknames_window():
 
         threading.Thread(target=worker, daemon=True).start()
     
-    resolve_name_btn = ModernButton(name_input_frame, text="🔏 Resolve", command=resolve_name, style="secondary")
+    resolve_name_btn = ModernButton(name_input_frame, text="Resolve", command=resolve_name, style="secondary")
     resolve_name_btn.pack(side="right")
 
 def open_sign_message_window():
-    win = create_modern_window("📝 Sign Message", 600, 350)
-    
+    win = create_modern_window("Sign Message", 600, 350)
+    win.attributes("-topmost", True)  # keep window on top
+
     # Header
     header_frame = tk.Frame(win, bg="#1F2937", height=60)
     header_frame.pack(fill="x")
     header_frame.pack_propagate(False)
-    
     tk.Label(
         header_frame,
         text="📝 Digital Message Signing",
@@ -983,40 +942,33 @@ def open_sign_message_window():
         bg="#1F2937",
         fg="white"
     ).pack(pady=15)
-    
+
     # Content
     content = ModernFrame(win)
     content.pack(fill="both", expand=True, padx=20, pady=20)
-    
-    tk.Label(content, text="Message to Sign", font=("Segoe UI", 11, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
-    
+
+    tk.Label(content, text="Message to Sign", font=("Segoe UI", 11, "bold"),
+             bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
+
     message_frame = tk.Frame(content, bg="white")
     message_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-    
-    message_text = tk.Text(
-        message_frame, 
-        height=6, 
-        bg="white", 
-        fg="#374151", 
-        font=("Segoe UI", 10),
-        relief="flat",
-        bd=1,
-        highlightbackground="#E5E7EB",
-        highlightthickness=1,
-        wrap="word"
-    )
+
+    message_text = tk.Text(message_frame, height=6, bg="white", fg="#374151",
+                           font=("Segoe UI", 10), relief="flat", bd=1,
+                           highlightbackground="#E5E7EB", highlightthickness=1, wrap="word")
     message_text.pack(fill="both", expand=True)
-    
+
     def sign_message():
         message = message_text.get("1.0", tk.END).strip()
         if not message:
             messagebox.showerror("Error", "Please enter a message to sign.")
             return
 
+        # Clear main output
         output_text.config(state='normal')
-        output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"📝 Signing message...\n")
-        output_text.insert(tk.END, f"Message: {message[:100]}{'...' if len(message) > 100 else ''}\n\n")
+        output_text.delete("1.0", tk.END)
+        output_text.insert(tk.END, f"--- Signing Message ---\n")
+        output_text.insert(tk.END, f"Message: {message[:100]}{'...' if len(message) > 100 else ''}\n")
         output_text.insert(tk.END, "Processing digital signature...\n")
         output_text.config(state='disabled')
 
@@ -1025,22 +977,37 @@ def open_sign_message_window():
         def run_sign():
             try:
                 proc = subprocess.Popen(
-                    ["nockchain-wallet", "--nockchain-socket", SOCKET_PATH,
-                     "sign-message", "-m", message],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1
+                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "sign-message", "-m", message],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
                 )
+
                 for line in proc.stdout:
                     clean_line = ANSI_ESCAPE.sub('', line).strip()
-                    if clean_line:
-                        if "error" in clean_line.lower():
-                            q.put(f"⚠️ {clean_line}\n")
-                        elif "signed" in clean_line.lower():
-                            q.put(f"✅ {clean_line}\n")
+                    if not clean_line:
+                        continue
+
+                    # Remove timestamp/metadata like I (12:20:24) [no]
+                    if clean_line.startswith(("I (", "E (")):
+                        idx = clean_line.find("]")
+                        if idx != -1:
+                            clean_line = clean_line[idx+1:].strip()
                         else:
-                            q.put(f"{clean_line}\n")
+                            idx = clean_line.find(")")
+                            if idx != -1:
+                                clean_line = clean_line[idx+1:].strip()
+
+                    lower_line = clean_line.lower()
+                    # Skip kernel/system logs
+                    if any(term in lower_line for term in ["kernel::boot", "nockchain_npc.sock", "nockapp"]):
+                        continue
+
+                    # Result formatting
+                    if "signed" in lower_line or "success" in lower_line:
+                        q.put(f"✅ {clean_line}\n")
+                    elif "error" in lower_line or "failed" in lower_line:
+                        q.put(f"❌ {clean_line}\n")
+                    # ignore other info lines
+
                 proc.stdout.close()
                 proc.wait()
             except Exception as e:
@@ -1052,17 +1019,17 @@ def open_sign_message_window():
         update_output_text(output_text, q)
         win.destroy()
 
-    sign_btn = ModernButton(content, text="📝 Sign Message", command=sign_message)
-    sign_btn.pack(padx=20, pady=10)
+    ModernButton(content, text="Sign Message", command=sign_message).pack(padx=20, pady=10)
+
 
 def open_verify_message_window():
     win = create_modern_window("🔏 Verify Message", 700, 500)
-    
+    win.attributes("-topmost", True)
+
     # Header
     header_frame = tk.Frame(win, bg="#1F2937", height=60)
     header_frame.pack(fill="x")
     header_frame.pack_propagate(False)
-    
     tk.Label(
         header_frame,
         text="🔏 Digital Signature Verification",
@@ -1070,54 +1037,40 @@ def open_verify_message_window():
         bg="#1F2937",
         fg="white"
     ).pack(pady=15)
-    
+
     # Content
     content = ModernFrame(win)
     content.pack(fill="both", expand=True, padx=20, pady=20)
-    
-    # Message field
-    tk.Label(content, text="Original Message", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
-    
-    message_frame = tk.Frame(content, bg="white")
-    message_frame.pack(fill="x", padx=20, pady=(0, 15))
-    
-    message_entry = ModernEntry(message_frame, placeholder="Enter the original message...")
-    message_entry.pack(fill="x")
-    
-    # Signature folder
-    tk.Label(content, text="Signature File Location", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(0, 5))
-    
-    folder_frame = tk.Frame(content, bg="white")
-    folder_frame.pack(fill="x", padx=20, pady=(0, 15))
-    
+
+    tk.Label(content, text="Original Message", font=("Segoe UI", 10, "bold"),
+             bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(15, 5))
+    message_entry = ModernEntry(content, placeholder="Enter the original message...")
+    message_entry.pack(fill="x", padx=20, pady=(0, 15))
+
+    tk.Label(content, text="Signature File Location", font=("Segoe UI", 10, "bold"),
+             bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(0, 5))
     folder_var = tk.StringVar()
-    folder_entry = ModernEntry(folder_frame, placeholder="Select folder containing signature file...")
-    folder_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-    
+    folder_entry = ModernEntry(content, placeholder="Select folder containing signature file...")
+    folder_entry.pack(fill="x", padx=20, pady=(0, 10))
+
     def browse_folder():
         folder = filedialog.askdirectory(initialdir=os.path.expanduser("~"))
         if folder:
             folder_var.set(folder)
-            # Update the entry display
             folder_entry.entry.delete(0, tk.END)
             folder_entry.entry.insert(0, folder)
             folder_entry.entry.config(fg="#374151")
 
-    browse_btn = ModernButton(folder_frame, text="📁 Browse", command=browse_folder, style="secondary")
-    browse_btn.pack(side="right")
-    
-    # Public key field
-    tk.Label(content, text="Public Key (Base58)", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(0, 5))
-    
-    pubkey_frame = tk.Frame(content, bg="white")
-    pubkey_frame.pack(fill="x", padx=20, pady=(0, 20))
-    
-    pubkey_entry = ModernEntry(pubkey_frame, placeholder="Enter public key for verification...")
-    pubkey_entry.pack(fill="x")
-    
+    ModernButton(content, text="📁 Browse", command=browse_folder, style="secondary").pack(padx=20, pady=(0, 15))
+
+    tk.Label(content, text="Public Key (Base58)", font=("Segoe UI", 10, "bold"),
+             bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(0, 5))
+    pubkey_entry = ModernEntry(content, placeholder="Enter public key for verification...")
+    pubkey_entry.pack(fill="x", padx=20, pady=(0, 20))
+
     def verify_message():
         message = message_entry.get().strip()
-        folder = folder_var.get().strip() or folder_entry.get().strip()
+        folder = folder_var.get().strip()
         pubkey = pubkey_entry.get().strip()
 
         if not message or not folder or not pubkey:
@@ -1129,9 +1082,10 @@ def open_verify_message_window():
             messagebox.showerror("Error", f"Signature file not found:\n{sig_file}")
             return
 
+        # Clear main output
         output_text.config(state='normal')
-        output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"🔏 Verifying digital signature...\n")
+        output_text.delete("1.0", tk.END)
+        output_text.insert(tk.END, f"--- Verifying Message ---\n")
         output_text.insert(tk.END, f"Message: {message[:50]}{'...' if len(message) > 50 else ''}\n")
         output_text.insert(tk.END, f"Signature file: {sig_file}\n")
         output_text.insert(tk.END, f"Public key: {truncate_pubkey(pubkey)}\n\n")
@@ -1142,40 +1096,42 @@ def open_verify_message_window():
         def run_verify():
             try:
                 proc = subprocess.Popen(
-                    [
-                        "nockchain-wallet",
-                        "--nockchain-socket", SOCKET_PATH,
-                        "verify-message",
-                        "-m", message,
-                        "-s", sig_file,
-                        "-p", pubkey
-                    ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1
+                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS,
+                     "verify-message", "-m", message, "-s", sig_file, "-p", pubkey],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
                 )
 
                 for line in proc.stdout:
                     clean_line = ANSI_ESCAPE.sub('', line).strip()
-                    if any(x in clean_line.lower() for x in ["kernel::boot", "nockchain_npc.sock", "nockapp"]):
-                        continue
                     if not clean_line:
                         continue
 
+                    # Remove timestamp/metadata like I (12:12:43) [no]
+                    if clean_line.startswith(("I (", "E (")):
+                        idx = clean_line.find("]")
+                        if idx != -1:
+                            clean_line = clean_line[idx+1:].strip()
+                        else:
+                            idx = clean_line.find(")")
+                            if idx != -1:
+                                clean_line = clean_line[idx+1:].strip()
+
                     lower_line = clean_line.lower()
-                    if "invalid signature" in lower_line or "not verified" in lower_line:
-                        q.put(f"❌ VERIFICATION FAILED: {clean_line}\n")
-                    elif "valid signature" in lower_line or "success" in lower_line:
-                        q.put(f"✅ VERIFICATION SUCCESS: {clean_line}\n")
-                    else:
-                        q.put(f"ℹ️ {clean_line}\n")
+                    # Skip system logs
+                    if any(term in lower_line for term in ["kernel::boot", "nockchain_npc.sock", "nockapp"]):
+                        continue
+
+                    # Result formatting
+                    if "valid signature" in lower_line or "success" in lower_line:
+                        q.put(f"✅ {clean_line}\n")
+                    elif "invalid signature" in lower_line or "not verified" in lower_line:
+                        q.put(f"❌ {clean_line}\n")
+                    # ignore other info lines
 
                 proc.stdout.close()
                 proc.wait()
-
             except Exception as e:
-                q.put(f"⚠️ Error verifying message: {e}\n")
+                q.put(f"❌ Error verifying message: {e}\n")
             finally:
                 q.put(None)
 
@@ -1183,8 +1139,8 @@ def open_verify_message_window():
         update_output_text(output_text, q)
         win.destroy()
 
-    verify_btn = ModernButton(content, text="🔏 Verify Signature", command=verify_message)
-    verify_btn.pack(padx=20, pady=10)
+    ModernButton(content, text="🔏 Verify Signature", command=verify_message).pack(padx=20, pady=10)
+
 
 def on_get_pubkeys():
     btn_get_pubkeys.button.config(text="Loading...")
@@ -1192,7 +1148,7 @@ def on_get_pubkeys():
     
     output_text.config(state='normal')
     output_text.delete('1.0', tk.END)
-    output_text.insert(tk.END, "🔑 Fetching Public Keys...\nThis may take a moment...\n\n")
+    output_text.insert(tk.END, "Fetching Public Keys...\nThis may take a moment...\n\n")
     output_text.config(state='disabled')
 
     def worker():
@@ -1200,12 +1156,12 @@ def on_get_pubkeys():
         def update_ui():
             display_pubkeys(pubkeys)
             output_text.config(state='normal')
-            output_text.insert(tk.END, f"✅ Found {len(pubkeys)} public keys\n")
+            output_text.insert(tk.END, f"Found {len(pubkeys)} public keys\n")
             if pubkeys:
                 for i, pk in enumerate(pubkeys, 1):
                     output_text.insert(tk.END, f"   {i}. {pk}\n")
             output_text.config(state='disabled')
-            btn_get_pubkeys.button.config(text="🔑 Get Pubkeys")
+            btn_get_pubkeys.button.config(text="Get Pubkeys")
             btn_get_pubkeys.set_enabled(True)
         root.after(0, update_ui)
 
@@ -1224,7 +1180,7 @@ def on_send():
         messagebox.showerror("Input Error", "Please fill all fields.")
         return
     if not all(re.fullmatch(r"[A-Za-z0-9]+", inputs[i]) for i in (0, 1)):
-        messagebox.showerror("Input Error", "❌ Sender and Recipient pubkeys must be alphanumeric.")
+        messagebox.showerror("Input Error", "Sender and Recipient pubkeys must be alphanumeric.")
         return
     if not (inputs[2].isdigit() and inputs[3].isdigit()):
         messagebox.showerror("Input Error", "Gift and Fee must be numeric.")
@@ -1235,7 +1191,7 @@ def on_send():
         
     output_text.config(state='normal')
     output_text.delete('1.0', tk.END)
-    output_text.insert(tk.END, "⏳ Initiating transaction...\n")
+    output_text.insert(tk.END, "Initiating transaction...\n")
     output_text.insert(tk.END, f"From: {truncate_pubkey(inputs[0])}\n")
     output_text.insert(tk.END, f"To: {truncate_pubkey(inputs[1])}\n")
     output_text.insert(tk.END, f"Amount: {inputs[2]} Nicks\n")
@@ -1247,7 +1203,7 @@ def on_send():
     def run_send():
         try:
             proc = subprocess.Popen(
-                ["bash", "./sendsimple.sh", "--nockchain-socket", SOCKET_PATH],
+                ["bash", "./sendsimple.sh", "--grpc-address", GRPC_ADDRESS],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -1263,7 +1219,7 @@ def on_send():
             proc.stdout.close()
             proc.wait()
         except Exception as e:
-            q.put(f"❌ Error sending transaction: {e}\n")
+            q.put(f"Error sending transaction: {e}\n")
         finally:
             q.put(None)
 
@@ -1271,7 +1227,7 @@ def on_send():
     update_output_text(output_text, q)
 
     def reenable_btn():
-        btn_send.button.config(text="💸 Send Transaction")
+        btn_send.button.config(text="Send Transaction")
         btn_send.set_enabled(True)
     root.after(8000, reenable_btn)
     
@@ -1328,14 +1284,14 @@ left_panel = tk.Frame(main_container, bg="#1F2937")
 left_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
 # Pubkeys section
-pubkeys_frame = ModernFrame(left_panel, title="🔑 Public Keys")
+pubkeys_frame = ModernFrame(left_panel, title="Public Keys")
 pubkeys_frame.pack(fill="x", pady=(0, 15))
 
 pubkeys_content = tk.Frame(pubkeys_frame, bg="white")
 pubkeys_content.pack(fill="both", expand=True, pady=10)
 
 # Activity Log section (moved to left, below pubkeys)
-output_frame = ModernFrame(left_panel, title="📋 Activity Log")
+output_frame = ModernFrame(left_panel, title="Activity Log")
 output_frame.pack(fill="both", expand=True)
 
 output_text = tk.Text(
@@ -1361,7 +1317,7 @@ right_panel = tk.Frame(main_container, bg="#F9FAFB")
 right_panel.pack(side="right", fill="y", padx=(10, 0))
 
 # Send Transaction Panel
-send_frame = ModernFrame(right_panel, title="💸 Send Transaction")
+send_frame = ModernFrame(right_panel, title="Send Transaction")
 send_frame.pack(fill="x")
 send_frame.config(width=400)
 
@@ -1392,7 +1348,7 @@ tk.Label(fee_frame, text="Fee (Nicks)", font=("Segoe UI", 10, "bold"), bg="white
 fee_entry = ModernEntry(fee_frame, placeholder="0")
 fee_entry.pack(fill="x")
 
-btn_send = ModernButton(fields_frame, text="💸 Send Transaction", command=on_send, style="primary")
+btn_send = ModernButton(fields_frame, text="Send Transaction", command=on_send, style="primary")
 btn_send.pack(fill="x", pady=15)
 
 # Status bar
@@ -1401,14 +1357,14 @@ status_bar.pack(side="bottom", fill="x")
 
 # Initial message
 output_text.config(state='normal')
-output_text.insert(tk.END, "🚀 Welcome to Robinhood's Nockchain Wallet Pro Edition!\n")
+output_text.insert(tk.END, "Welcome to Robinhood's Nockchain Wallet Pro Edition!\n")
 output_text.insert(tk.END, "─" * 50 + "\n")
 output_text.insert(tk.END, "Click 'Get Pubkeys' to load your public keys.\n\n")
-output_text.insert(tk.END, f"Socket Path: {SOCKET_PATH}\n")
-output_text.insert(tk.END, f"Status: Ready ✅\n")
+output_text.insert(tk.END, f"gRPC Address: {GRPC_ADDRESS}\n")
+output_text.insert(tk.END, f"Status: Ready\n")
 output_text.insert(
     "end", 
-    "🙏 Donate to Robinhood if you like the GUI : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
+    "Donate to Robinhood if you like the GUI : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
 )
 output_text.config(state='disabled')
 
