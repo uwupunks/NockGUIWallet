@@ -10,6 +10,22 @@ import datetime
 import requests
 from tkinter import font
 
+# --- Node Status Check ---
+
+def is_nockchain_running():
+    try:
+        if sys.platform.startswith("win"):
+            # Tasklist output
+            output = subprocess.check_output("tasklist", shell=True).decode().lower()
+            return "nockchain.exe" in output
+        else:
+            # ps aux output
+            output = subprocess.check_output(["ps", "aux"]).decode().lower()
+            return "nockchain" in output
+    except Exception as e:
+        print("Error checking processes:", e)
+        return False
+
 # --- Enhanced Visual Components ---
 
 class ModernButton(tk.Frame):
@@ -155,6 +171,16 @@ class StatusBar(tk.Frame):
         )
         self.change_label.pack(side="left", padx=(10, 0))
         
+        # Node Status
+        self.node_label = tk.Label(
+            self,
+            text="Node: Checking...",
+            font=("Segoe UI", 9),
+            bg="#1F2937",
+            fg="#F59E0B"
+        )
+        self.node_label.pack(side="left", padx=20)
+        
         # Connection status
         self.connection_label = tk.Label(
             self,
@@ -177,6 +203,24 @@ class StatusBar(tk.Frame):
         
         self.update_time()
         self.update_price()
+        self.update_node_status()
+    
+    def update_node_status(self):
+        """Update node status every 30 seconds"""
+        def check_status():
+            try:
+                if is_nockchain_running():
+                    self.node_label.config(text="Node: Running ✅", fg="#10B981")
+                else:
+                    self.node_label.config(text="Node: Not Running 💢", fg="#EF4444")
+            except Exception:
+                self.node_label.config(text="Node: Error", fg="#EF4444")
+        
+        # Run in background thread to avoid blocking UI
+        threading.Thread(target=check_status, daemon=True).start()
+        
+        # Schedule next update
+        self.after(30000, self.update_node_status)  # Check every 30 seconds
     
     def update_time(self):
         now = datetime.datetime.now()
@@ -243,6 +287,22 @@ def get_price():
         return price, change_24h
     except Exception:
         return 0.000123, 2.45  # Mock data
+
+# Manual node status check function
+def on_check_node_status():
+    """Manually check and display node status"""
+    def check():
+        try:
+            if is_nockchain_running():
+                print_to_output("Node Status: Nockchain process is running")
+                status_bar.node_label.config(text="Node: Running", fg="#10B981")
+            else:
+                print_to_output("Node Status: Nockchain process not found")
+                status_bar.node_label.config(text="Node: Not Running", fg="#EF4444")
+        except Exception as e:
+            print_to_output(f"Error checking node status: {e}")
+    
+    threading.Thread(target=check, daemon=True).start()
         
 # --- Create Wallet ---
 
@@ -721,7 +781,7 @@ def open_check_balance_window():
     header_frame.pack_propagate(False)
     tk.Label(
         header_frame,
-        text="Check Account Balance",
+        text="🏦 Check Account Balance",
         font=("Segoe UI", 14, "bold"),
         bg="#1F2937",
         fg="white"
@@ -793,12 +853,12 @@ def open_check_balance_window():
                 if not required_sigs_list:
                     status_msg = "No 'Required Signatures' info found in notes.\n"
                 elif all(m == 1 for m in required_sigs_list):
-                    status_msg = "Coins are Spendable! All required signatures = 1"
+                    status_msg = "✅ Coins are Spendable! All required signatures = 1"
                 else:
-                    status_msg = "Some Coins are Unspendable! Required signatures > 1 detected"
+                    status_msg = "💢 Some Coins are Unspendable! Required signatures > 1 detected"
                 
                 summary = f"\n{'='*50}\n"
-                summary += f"BALANCE SUMMARY\n"
+                summary += f"🏦 BALANCE SUMMARY 🏦\n"
                 summary += f"{'='*50}\n"
                 summary += f"Total Assets: {total_assets:,} Nicks\n"
                 summary += f"Equivalent: ~{nocks:,.4f} Nocks\n"
@@ -1003,15 +1063,15 @@ def open_sign_message_window():
 
                     # Result formatting
                     if "signed" in lower_line or "success" in lower_line:
-                        q.put(f"✅ {clean_line}\n")
+                        q.put(f"✅ Success: {clean_line}\n")
                     elif "error" in lower_line or "failed" in lower_line:
-                        q.put(f"❌ {clean_line}\n")
+                        q.put(f"Error: {clean_line}\n")
                     # ignore other info lines
 
                 proc.stdout.close()
                 proc.wait()
             except Exception as e:
-                q.put(f"❌ Error signing message: {e}\n")
+                q.put(f"Error signing message: {e}\n")
             finally:
                 q.put(None)
 
@@ -1023,7 +1083,7 @@ def open_sign_message_window():
 
 
 def open_verify_message_window():
-    win = create_modern_window("🔏 Verify Message", 700, 500)
+    win = create_modern_window("Verify Message", 700, 500)
     win.attributes("-topmost", True)
 
     # Header
@@ -1061,7 +1121,7 @@ def open_verify_message_window():
             folder_entry.entry.insert(0, folder)
             folder_entry.entry.config(fg="#374151")
 
-    ModernButton(content, text="📁 Browse", command=browse_folder, style="secondary").pack(padx=20, pady=(0, 15))
+    ModernButton(content, text="Browse", command=browse_folder, style="secondary").pack(padx=20, pady=(0, 15))
 
     tk.Label(content, text="Public Key (Base58)", font=("Segoe UI", 10, "bold"),
              bg="white", fg="#374151").pack(anchor="w", padx=20, pady=(0, 5))
@@ -1123,15 +1183,15 @@ def open_verify_message_window():
 
                     # Result formatting
                     if "valid signature" in lower_line or "success" in lower_line:
-                        q.put(f"✅ {clean_line}\n")
+                        q.put(f"✅ Success: {clean_line}\n")
                     elif "invalid signature" in lower_line or "not verified" in lower_line:
-                        q.put(f"❌ {clean_line}\n")
+                        q.put(f"Failed: {clean_line}\n")
                     # ignore other info lines
 
                 proc.stdout.close()
                 proc.wait()
             except Exception as e:
-                q.put(f"❌ Error verifying message: {e}\n")
+                q.put(f"Error verifying message: {e}\n")
             finally:
                 q.put(None)
 
@@ -1139,7 +1199,7 @@ def open_verify_message_window():
         update_output_text(output_text, q)
         win.destroy()
 
-    ModernButton(content, text="🔏 Verify Signature", command=verify_message).pack(padx=20, pady=10)
+    ModernButton(content, text="Verify Signature", command=verify_message).pack(padx=20, pady=10)
 
 
 def on_get_pubkeys():
@@ -1361,10 +1421,18 @@ output_text.insert(tk.END, "Welcome to Robinhood's Nockchain Wallet Pro Edition!
 output_text.insert(tk.END, "─" * 50 + "\n")
 output_text.insert(tk.END, "Click 'Get Pubkeys' to load your public keys.\n\n")
 output_text.insert(tk.END, f"gRPC Address: {GRPC_ADDRESS}\n")
-output_text.insert(tk.END, f"✅ Status: Ready\n")
+output_text.insert(tk.END, f"gRPC Status: ✅ Ready\n")
+# Node status check
+if is_nockchain_running():
+    node_status = "✅ Nockchain node is running"
+else:
+    node_status = "💢 Nockchain node is not running 💢"
+
+output_text.insert(tk.END, f"Node Status: {node_status}\n\n")
+
 output_text.insert(
     "end", 
-    "💖 Donate to Robinhood if you like the GUI : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
+    "💝 Donations : 2deHSdGpxFh1hhC2qMjM5ujBvG7auCeoJLcLAwGKpfSsb8zfaTms8SMdax7fCyjoVTmbqXgUDWLc7GURXtMeEZbPz57LeakGKTAWZSVYcBwyHvcHuskqL4rVrw56rPXT6wSt\n"
 )
 output_text.config(state='disabled')
 
