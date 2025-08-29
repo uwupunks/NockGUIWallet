@@ -1,3 +1,4 @@
+global nock_to_usd, change_24h
 import os
 import sys
 import webbrowser
@@ -10,6 +11,9 @@ import re
 import datetime
 import requests
 from tkinter import font
+
+nock_to_usd = 0.0
+change_24h = 0.0
 
 # --- Node Status Check ---
 
@@ -533,7 +537,6 @@ def on_import_keys():
 
     threading.Thread(target=worker, daemon=True).start()
 
-
 # Remove ANSI escape sequences
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
@@ -592,7 +595,7 @@ def get_pubkeys():
     except Exception as e:
         print(f"Error while getting pubkeys: {e}")
         return []
-
+        
 def copy_to_clipboard(pubkey):
     root.clipboard_clear()
     root.clipboard_append(pubkey)
@@ -635,6 +638,115 @@ def truncate_pubkey(key, start_chars=32, end_chars=32):
         return key
     return f"{key[:start_chars]}...{key[-end_chars:]}"
     
+def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=None):
+    """Automatically check balance when a pubkey is selected"""
+    if not pubkey:
+        return
+        
+    # Update output to show checking status
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, f"Auto-checking balance for selected key...\n")
+    output_text.insert(tk.END, f"Address: {truncate_pubkey(pubkey)}\n")
+    output_text.insert(tk.END, "Please wait...\n\n")
+    output_text.config(state='disabled')
+    
+    # Create queue for output updates
+    balance_queue = queue.Queue()
+    
+def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=None):
+    """Automatically check balance for a selected pubkey"""
+    if not pubkey:
+        return
+
+    # Show checking status
+    output_text.config(state='normal')
+    output_text.delete('1.0', tk.END)
+    output_text.insert(tk.END, f"Auto-checking balance for selected key...\n")
+    output_text.insert(tk.END, f"Address: {truncate_pubkey(pubkey)}\n")
+    output_text.insert(tk.END, "Please wait...\n\n")
+    output_text.config(state='disabled')
+
+    balance_queue = queue.Queue()
+
+    def run_balance_check():
+        try:
+            proc = subprocess.Popen(
+                ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "list-notes-by-pubkey", pubkey],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+
+            total_assets = 0
+            required_sigs_list = []
+
+            for line in proc.stdout:
+                m_asset = re.search(r"- Assets:\s*(\d+)", line)
+                if m_asset:
+                    total_assets += int(m_asset.group(1))
+                m_sig = re.search(r"- Required Signatures:\s*(\d+)", line)
+                if m_sig:
+                    required_sigs_list.append(int(m_sig.group(1)))
+
+            proc.stdout.close()
+            proc.wait()
+
+            nocks = total_assets / 65536
+
+            # Determine coin status
+            if not required_sigs_list:
+                status_msg = "No 'Required Signatures' info found in notes."
+            elif all(m == 1 for m in required_sigs_list):
+                status_msg = "✅ Coins are Spendable! All required signatures = 1"
+            else:
+                status_msg = "💢 Some Coins are Unspendable! Required signatures > 1 detected"
+
+            # Calculate USD balance safely
+            try:
+                global nock_to_usd  # use the global price fetched elsewhere
+                usd_balance = nocks * nock_to_usd
+            except NameError:
+                usd_balance = 0.0
+
+            # Update the balance labels
+            if balance_main_label and balance_details_label:
+                balance_text = f"{nocks:,.4f} NOCK"
+                details_text = f"{total_assets:,} Nicks\n${usd_balance:,.2f} USD"
+                color = "#10b93d" if total_assets > 0 else "#FF0000"
+                
+                root.after(0, lambda: balance_main_label.config(text=balance_text, fg=color))
+                root.after(0, lambda: balance_details_label.config(text=details_text, fg="#6B7280"))
+
+            # Build summary for output window
+            summary = (
+                f"\n{'='*50}\n"
+                f"🏦 AUTO BALANCE CHECK 🏦\n"
+                f"{'='*50}\n"
+                f"Selected Key: {truncate_pubkey(pubkey)}\n"
+                f"Total Assets: {total_assets:,} Nicks\n"
+                f"Equivalent: ~{nocks:,.4f} NOCK\n"
+                f"USD Value: ${usd_balance:,.2f}\n"
+                f"Status: {status_msg}\n"
+            )
+
+            balance_queue.put(summary)
+
+        except Exception as e:
+            balance_queue.put(f"Error checking balance: {e}\n")
+            # Update labels on error
+            if balance_main_label and balance_details_label:
+                root.after(0, lambda: balance_main_label.config(text="Error", fg="#EF4444"))
+                root.after(0, lambda: balance_details_label.config(text="Failed to check balance", fg="#6B7280"))
+        finally:
+            balance_queue.put(None)
+
+    # Start background thread
+    threading.Thread(target=run_balance_check, daemon=True).start()
+    update_output_text(output_text, balance_queue)
+
+    
 def display_pubkeys(pubkeys):
     for widget in pubkeys_content.winfo_children():
         widget.destroy()
@@ -643,7 +755,7 @@ def display_pubkeys(pubkeys):
         tk.Label(pubkeys_content, text="🔑 No public keys found",
                  font=("Segoe UI", 12), bg="white", fg="#6B7280").pack(pady=20)
         return
-
+    
     # State variables
     selected_index = tk.IntVar(value=0)
     dropdown_open = tk.BooleanVar(value=False)
@@ -714,13 +826,14 @@ def display_pubkeys(pubkeys):
             scrollbar.pack(side="right", fill="y")
         dropdown_open.set(not dropdown_open.get())
 
-    # Populate options
+# Populate options
     for i, pk in enumerate(pubkeys):
         def select_key(idx=i):
             selected_index.set(idx)
             selected_btn.config(text=f"Key {idx+1}: {truncate_pubkey(pubkeys[idx])} ▼")
             key_label.config(text=truncate_pubkey(pubkeys[idx]))
             toggle_dropdown()
+            auto_check_balance(pubkeys[idx], balance_main, balance_details)
 
         btn = tk.Button(
             options_frame,
@@ -737,8 +850,7 @@ def display_pubkeys(pubkeys):
         # Hover effect
         btn.bind("<Enter>", lambda e, b=btn: b.config(bg="#F3F4F6"))
         btn.bind("<Leave>", lambda e, b=btn: b.config(bg="white"))
-
-
+        
 # --- Nocknames API Calls ---
 
 def resolve_nockname(address):
@@ -1324,9 +1436,6 @@ btn_export_keys.pack(side="left", padx=2)
 btn_get_pubkeys = ModernButton(header_buttons, text="🔑 Get Pubkeys", command=on_get_pubkeys)
 btn_get_pubkeys.pack(side="left", padx=2)
 
-btn_check_balance = ModernButton(header_buttons, text="🏦 Balance", command=open_check_balance_window, style="secondary")
-btn_check_balance.pack(side="left", padx=2)
-
 btn_nocknames = ModernButton(header_buttons, text="👨 Names", command=open_nocknames_window, style="secondary")
 btn_nocknames.pack(side="left", padx=2)
 
@@ -1377,6 +1486,33 @@ scrollbar.config(command=output_text.yview)
 right_side = tk.Frame(main_container, bg="#F3F4F6")
 right_side.pack(side="right", fill="y", padx=(10, 0))
 
+# --- Right Balance section ---
+balance_frame = ModernFrame(right_side, title="🏦 Balance 🏦")
+balance_frame.pack(fill="x", pady=(0,0))
+
+balance_content = tk.Frame(balance_frame, bg="white", height=100)
+balance_content.pack(fill="x", padx=10, pady=10)
+balance_content.pack_propagate(False)
+
+# Balance display elements
+balance_main = tk.Label(
+    balance_content,
+    text="0.00 NOCK",
+    font=("Segoe UI", 13, "bold"),
+    bg="white",
+    fg="#FF0000"
+)
+balance_main.pack(pady=(10, 5))
+
+balance_details = tk.Label(
+    balance_content,
+    text="Select a key to view balance",
+    font=("Segoe UI", 11),
+    bg="white",
+    fg="#6B7280"
+)
+balance_details.pack()
+
 # --- Send Transaction Panel ---
 right_panel = tk.Frame(right_side, bg="#F9FAFB")
 right_panel.pack(fill="x", pady=(0,5))  \
@@ -1408,42 +1544,6 @@ tk.Label(
 
 btn_explorer = ModernButton(below_panel, text="🐬 NockPool", command=lambda: webbrowser.open_new_tab("https://nockpool.com"), style="secondary")
 btn_explorer.pack(pady=(0,10))
-
-# --- Directly below 3 ---
-below_panel = tk.Frame(right_side, bg="#F9FAFB")
-below_panel.pack(fill="x", pady=(0,5))
-
-tk.Label(
-    below_panel,
-    text="⛓️ Official Links",
-    bg="#F9FAFB",
-    font=("Segoe UI", 13, "bold")
-).pack(pady=20)
-
-# Container frame for buttons
-buttons_frame = tk.Frame(below_panel, bg="#F9FAFB")
-buttons_frame.pack(pady=(0,10))
-
-# GitHub button
-btn_github = ModernButton(
-    buttons_frame,
-    text="🧰 Github",
-    command=lambda: webbrowser.open_new_tab("https://github.com/zorp-corp/nockchain"),
-    style="secondary"
-)
-btn_github.pack(side="left", padx=5)
-
-# Website button
-btn_website = ModernButton(
-    buttons_frame,
-    text="🔗 Website",
-    command=lambda: webbrowser.open_new_tab("https://www.nockchain.org/"),
-    style="secondary"
-)
-btn_website.pack(side="left", padx=5)
-
-# Center the buttons_frame
-buttons_frame.pack(anchor="center")
 
 # Send Transaction Panel
 send_frame = ModernFrame(right_panel, title="Send Transaction")
@@ -1505,7 +1605,9 @@ output_text.insert(
 )
 output_text.config(state='disabled')
 
-# Initialize with empty pubkeys display
+# Show empty list right away
 display_pubkeys([])
+
+nock_to_usd, change_24h = get_price()
 
 root.mainloop()
