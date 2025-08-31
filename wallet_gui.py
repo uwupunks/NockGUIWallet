@@ -1342,63 +1342,104 @@ def on_get_pubkeys():
 
 def on_send():
     # Get values from modern entries
-    inputs = [
-        sender_entry.get().strip(),
-        recipient_entry.get().strip(),
-        gift_entry.get().strip(),
-        fee_entry.get().strip()
-    ]
-    
-    if not all(inputs):
-        messagebox.showerror("Input Error", "Please fill all fields.")
+    sender = sender_entry.get().strip()
+    recipient = recipient_entry.get().strip()
+    gift = gift_entry.get().strip()
+    fee = fee_entry.get().strip()
+    index = index_entry.get().strip()  # optional field
+
+    # Validate required fields
+    if not all([sender, recipient, gift, fee]):
+        messagebox.showerror("Input Error", "Please fill all fields except Index (optional).")
         return
-    if not all(re.fullmatch(r"[A-Za-z0-9]+", inputs[i]) for i in (0, 1)):
+
+    if not (re.fullmatch(r"[A-Za-z0-9]+", sender) and re.fullmatch(r"[A-Za-z0-9]+", recipient)):
         messagebox.showerror("Input Error", "Sender and Recipient pubkeys must be alphanumeric.")
         return
-    if not (inputs[2].isdigit() and inputs[3].isdigit()):
+
+    if not (gift.isdigit() and fee.isdigit()):
         messagebox.showerror("Input Error", "Gift and Fee must be numeric.")
         return
 
     btn_send.button.config(text="Sending...")
     btn_send.set_enabled(False)
-        
+
     output_text.config(state='normal')
     output_text.delete('1.0', tk.END)
-    output_text.insert(tk.END, "Initiating transaction...\n")
-    output_text.insert(tk.END, f"From: {truncate_pubkey(inputs[0])}\n")
-    output_text.insert(tk.END, f"To: {truncate_pubkey(inputs[1])}\n")
-    output_text.insert(tk.END, f"Amount: {inputs[2]} Nicks\n")
-    output_text.insert(tk.END, f"Fee: {inputs[3]} Nicks\n\n")
+
+    # Define tags for colors
+    output_text.tag_config("info", foreground="black")
+    output_text.tag_config("success", foreground="green")
+    output_text.tag_config("error", foreground="red")
+
+    # Print initial info
+    output_text.insert(tk.END, "Initiating transaction...\n", "info")
+    output_text.insert(tk.END, f"From: {truncate_pubkey(sender)}\n", "info")
+    output_text.insert(tk.END, f"To: {truncate_pubkey(recipient)}\n", "info")
+    output_text.insert(tk.END, f"Amount: {gift} Nicks\n", "info")
+    output_text.insert(tk.END, f"Fee: {fee} Nicks\n\n", "info")
     output_text.config(state='disabled')
 
     q = queue.Queue()
 
     def run_send():
         try:
+            cmd = ["bash", "./sendsimple.sh", "--grpc-address", GRPC_ADDRESS]
+            if index != "":
+                cmd.extend(["--index", index])
+
             proc = subprocess.Popen(
-                ["bash", "./sendsimple.sh", "--grpc-address", GRPC_ADDRESS],
+                cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1
             )
-            proc.stdin.write("\n".join(inputs) + "\n")
+
+            # Send inputs to the script
+            proc.stdin.write(f"{sender}\n{recipient}\n{gift}\n{fee}\n")
             proc.stdin.flush()
             proc.stdin.close()
 
             for line in proc.stdout:
-                q.put(line)
+                # Skip verbose logs
+                if any(kw in line.lower() for kw in ["kernel::boot", "tracy tracing", "serf: cold"]):
+                    continue
+                # Color-code success/failure lines
+                if "draft transaction created" in line.lower() or "transaction sent successfully" in line.lower():
+                    q.put(("success", line))
+                elif "failed" in line.lower() or "error" in line.lower():
+                    q.put(("error", line))
+                else:
+                    q.put(("info", line))
             proc.stdout.close()
             proc.wait()
+
         except Exception as e:
-            q.put(f"Error sending transaction: {e}\n")
+            q.put(("error", f"Error sending transaction: {e}\n"))
         finally:
             q.put(None)
 
-    threading.Thread(target=run_send, daemon=True).start()
-    update_output_text(output_text, q)
+    # Update GUI text with colors
+    def update_text():
+        try:
+            while True:
+                item = q.get_nowait()
+                if item is None:
+                    break
+                tag, line = item
+                output_text.config(state='normal')
+                output_text.insert(tk.END, line, tag)
+                output_text.see(tk.END)
+                output_text.config(state='disabled')
+        except queue.Empty:
+            root.after(100, update_text)
 
+    threading.Thread(target=run_send, daemon=True).start()
+    update_text()
+
+    # Re-enable button after delay
     def reenable_btn():
         btn_send.button.config(text="Send Transaction")
         btn_send.set_enabled(True)
@@ -1576,6 +1617,12 @@ fee_frame.pack(side="left", fill="x", expand=True, padx=(10, 0))
 tk.Label(fee_frame, text="Fee (Nicks)", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(0, 5))
 fee_entry = ModernEntry(fee_frame, placeholder="0")
 fee_entry.pack(fill="x")
+
+# Index field
+tk.Label(fields_frame, text="Index", font=("Segoe UI", 10, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(0, 5))
+index_entry = ModernEntry(fields_frame, placeholder="Enter index for Child or leave blank for Master...")
+index_entry.pack(fill="x", pady=(0, 15))
+
 
 btn_send = ModernButton(fields_frame, text="Send Transaction", command=on_send, style="primary")
 btn_send.pack(fill="x", pady=15)
