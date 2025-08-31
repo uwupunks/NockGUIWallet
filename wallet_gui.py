@@ -8,8 +8,10 @@ import threading
 import subprocess
 import queue
 import re
-import datetime
+import json
+import csv
 import requests
+from datetime import datetime
 from tkinter import font
 
 nock_to_usd = 0.0
@@ -228,7 +230,7 @@ class StatusBar(tk.Frame):
         self.after(30000, self.update_node_status)  # Check every 30 seconds
     
     def update_time(self):
-        now = datetime.datetime.now()
+        now = datetime.now()
         self.time_label.config(text=now.strftime("%b %d %H:%M:%S"))
         self.after(1000, self.update_time)
     
@@ -377,8 +379,9 @@ def worker():
         root.after(0, print_to_output, f"❌ Error creating wallet: {e}")
         root.after(0, lambda: messagebox.showerror("Error", f"Failed to create wallet:\n{e}"))
         
-# -- Create Children ---
+# Add these imports at the top of your wallet_gui.py file:
 
+# -- Create Children ---
 def on_derive_children():
     # Ask user how many children to derive
     num_children = simpledialog.askinteger(
@@ -390,13 +393,16 @@ def on_derive_children():
         output_text.insert(tk.END, "Child key derivation canceled.\n")
         output_text.config(state='disabled')
         return
-
+    
     # Clear previous log and show starting message
     output_text.config(state='normal')
     output_text.delete('1.0', tk.END)
     output_text.insert(tk.END, f"🧬 Deriving {num_children} child key(s)...\n\n")
     output_text.config(state='disabled')
-
+    
+    # List to store derived child information
+    derived_children = []
+    
     def worker():
         for i in range(num_children):
             # Show deriving child key message
@@ -404,26 +410,164 @@ def on_derive_children():
             output_text.insert(tk.END, f"➡️ Deriving child key {i}...\n")
             output_text.see(tk.END)
             output_text.config(state='disabled')
-
+            
             # Run nockchain-wallet derive-child command
             try:
-                subprocess.run(
+                result = subprocess.run(
                     ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "derive-child", str(i)],
                     capture_output=True, text=True, check=True
                 )
+                
+                # Parse pubkey from the derive-child output
+                pubkey = extract_pubkey_from_output(result.stdout)
+                
+                # Save the child key information with index and pubkey
+                child_info = {
+                    'index': i,
+                    'pubkey': pubkey,
+                    'timestamp': datetime.now().isoformat(),
+                    'derive_output': result.stdout.strip() if result.stdout else None
+                }
+                derived_children.append(child_info)
+                
+                output_text.config(state='normal')
+                output_text.insert(tk.END, f"✅ Child key {i} derived successfully\n")
+                if pubkey:
+                    # Show first 16 and last 8 characters of pubkey for verification
+                    pubkey_preview = f"{pubkey[:16]}...{pubkey[-8:]}" if len(pubkey) > 24 else pubkey
+                    output_text.insert(tk.END, f"   📋 Pubkey: {pubkey_preview}\n")
+                output_text.config(state='disabled')
+                
             except subprocess.CalledProcessError as e:
                 output_text.config(state='normal')
                 output_text.insert(tk.END, f"❌ Error deriving child {i}: {e.stderr}\n")
                 output_text.config(state='disabled')
-
+                
+                # Still save the error information
+                child_info = {
+                    'index': i,
+                    'pubkey': None,
+                    'timestamp': datetime.now().isoformat(),
+                    'error': e.stderr.strip() if e.stderr else str(e)
+                }
+                derived_children.append(child_info)
+        
+        # Export to CSV with fixed filename
+        export_children_csv(derived_children)
+        
         # Success message
         output_text.config(state='normal')
-        output_text.insert(tk.END, "\n✅ Children created successfully! Get pubkeys to view.\n")
+        output_text.insert(tk.END, f"\n✅ {len(derived_children)} children processed!\n")
+        output_text.insert(tk.END, "Get pubkeys to view derived keys.\n")
         output_text.config(state='disabled')
-
+    
     threading.Thread(target=worker, daemon=True).start()
 
+def save_derived_children(children_list):
+    """Save derived children information to a JSON file"""
+    try:
+        # Create filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"derived_children_{timestamp}.json"
+        
+        # Prepare data structure
+        save_data = {
+            'derivation_session': timestamp,
+            'total_children': len(children_list),
+            'children': children_list
+        }
+        
+        # Save to file
+        with open(filename, 'w') as f:
+            json.dump(save_data, f, indent=2)
+        
+        output_text.config(state='normal')
+        output_text.insert(tk.END, f"📁 Child indices saved to: {filename}\n")
+        output_text.config(state='disabled')
+        
+    except Exception as e:
+        output_text.config(state='normal')
+        output_text.insert(tk.END, f"⚠️ Warning: Could not save indices: {str(e)}\n")
+        output_text.config(state='disabled')
+
+def extract_pubkey_from_output(output):
+    """Extract public key from derive-child command output"""
+    if not output:
+        return None
     
+    lines = output.strip().split('\n')
+    
+    # Look for the "- Public Key:" line and extract the key from the next line
+    for i, line in enumerate(lines):
+        line = line.strip()
+        
+        # Found the "- Public Key:" line
+        if line == "- Public Key:":
+            # The public key should be on the next line, wrapped in single quotes
+            if i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                # Remove single quotes if present
+                if next_line.startswith("'") and next_line.endswith("'"):
+                    return next_line[1:-1]  # Remove the quotes
+                else:
+                    return next_line
+        
+        # Alternative: look for lines that start with a quote and contain a long string
+        elif line.startswith("'") and len(line) > 50:
+            # This might be the public key line directly
+            if line.endswith("'"):
+                return line[1:-1]  # Remove quotes
+    
+    # Fallback: look for any long alphanumeric string that could be a key
+    for line in lines:
+        line = line.strip()
+        if line.startswith("'") and line.endswith("'") and len(line) > 50:
+            potential_key = line[1:-1]  # Remove quotes
+            # Check if it looks like a base58 key (contains typical base58 chars)
+            if all(c in '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz' for c in potential_key):
+                return potential_key
+    
+    return None
+
+# Optional: Function to load previously derived children
+def load_derived_children(filename):
+    """Load previously derived children from JSON file"""
+    try:
+        with open(filename, 'r') as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        print(f"Error loading derived children: {e}")
+        return None
+
+def export_children_csv(children_data):
+    """Export derived children to CSV format with fixed filename"""
+    filename = "childrenindexes.csv"
+    
+    try:
+        import csv
+        with open(filename, 'w', newline='') as csvfile:
+            fieldnames = ['index', 'pubkey', 'timestamp', 'status']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            writer.writeheader()
+            for child in children_data:
+                writer.writerow({
+                    'index': child['index'],
+                    'pubkey': child.get('pubkey', 'N/A'),
+                    'timestamp': child['timestamp'],
+                    'status': 'Success' if child.get('pubkey') else 'Failed'
+                })
+        
+        output_text.config(state='normal')
+        output_text.insert(tk.END, f"📊 Children saved to: {filename}\n")
+        output_text.config(state='disabled')
+        
+    except Exception as e:
+        output_text.config(state='normal')
+        output_text.insert(tk.END, f"⚠️ Warning: Could not save CSV: {str(e)}\n")
+        output_text.config(state='disabled')
+       
 # --- Export Keys ---
 
 def on_export_keys():
