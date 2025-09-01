@@ -104,7 +104,7 @@ if ! nockchain-wallet --grpc-address "$GRPC_ADDRESS" create-tx \
   --recipients "$recipients_arg" \
   --gifts "$gift" \
   --fee "$fee" \
-  "${index_arg[@]}"; then
+  "${index_arg[@]}" >/dev/null; then
   echo "❌ Failed to create draft transaction."
   exit 1
 fi
@@ -118,9 +118,10 @@ fi
 
 echo "✅ Draft transaction created: $txfile"
 
-# Send transaction
+# Send TX
 echo "🚀 Sending transaction..."
-if nockchain-wallet --grpc-address "$GRPC_ADDRESS" send-tx "$txfile"; then
+if output=$(nockchain-wallet --grpc-address "$GRPC_ADDRESS" send-tx "$txfile" 2>&1 | grep -vE '^\x1b\[.*m(I|\[I)'); then
+  echo "$output" | grep -v "nockchain_wallet" # strips the extra chatter
   echo "✅ Transaction sent successfully!"
 else
   echo "❌ Failed to send transaction."
