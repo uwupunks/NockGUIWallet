@@ -1,5 +1,7 @@
 #!/bin/bash
+set -euo pipefail
 
+# ---------------- CONFIG ---------------- #
 GRPC_ARGS=(--client public --public-grpc-server-addr https://nockchain-api.zorp.io)
 TXS_DIR="$(pwd)/txs"
 
@@ -8,8 +10,8 @@ echo "       Robinhood's Simple Send"
 echo "========================================"
 echo
 
-# Parse optional --index argument
-index=""
+# ---------------- ARGUMENT PARSING ---------------- #
+index=""  # optional wallet index
 while [[ $# -gt 0 ]]; do
   case $1 in
     --index)
@@ -22,13 +24,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Prompt inputs if not passed via stdin
+# ---------------- PROMPT INPUTS ---------------- #
 read -rp $'📤 Sender pubkey:\n> ' sender
 read -rp $'📥 Recipient pubkey:\n> ' recipient
 read -rp $'🎁 Gift amount:\n> ' gift
 read -rp $'💸 Fee amount:\n> ' fee
 
-# Validate gift and fee are integers
+# Validate gift and fee
 if ! [[ "$gift" =~ ^[0-9]+$ ]] || ! [[ "$fee" =~ ^[0-9]+$ ]]; then
   echo "❌ Gift and fee must be integers."
   exit 1
@@ -37,8 +39,8 @@ fi
 total=$((gift + fee))
 echo -e "\n➕ Total amount needed (gift + fee): $total\n"
 
+# ---------------- EXPORT NOTES CSV ---------------- #
 csvfile="notes-${sender}.csv"
-
 echo "📂 Exporting notes CSV..."
 if ! nockchain-wallet "${GRPC_ARGS[@]}" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
   echo "❌ Failed to export notes CSV."
@@ -49,7 +51,7 @@ echo -n "⏳ Waiting for notes file ($csvfile)... "
 while [ ! -f "$csvfile" ]; do sleep 1; done
 echo "Found!"
 
-# Select notes until total assets cover required amount
+# ---------------- SELECT NOTES ---------------- #
 selected_notes=()
 selected_assets=0
 while IFS=',' read -r name_first name_last assets _block_height _source_hash; do
@@ -67,31 +69,27 @@ fi
 echo "✅ Selected notes: ${selected_notes[*]}"
 echo "💰 Total assets selected: $selected_assets"
 
-# Build --names argument
+# ---------------- BUILD ARGUMENTS ---------------- #
 names_arg=""
 for note in "${selected_notes[@]}"; do
-  if [[ -n "$names_arg" ]]; then
-    names_arg+=","
-  fi
+  [[ -n "$names_arg" ]] && names_arg+=","
   names_arg+="[$note]"
 done
 
-# Build --recipients argument
 recipients_arg="[1 $recipient]"
 
-# Prepare transaction folder
 mkdir -p "$TXS_DIR"
 echo -e "\n🧹 Cleaning transaction folder ($TXS_DIR)..."
 rm -f "$TXS_DIR"/*
 echo "🗑️ Folder cleaned."
 
-# Optional index argument array
+# Build optional index array
 index_arg=()
-if [[ "$index" != "" ]]; then
+if [[ -n "$index" ]]; then
   index_arg=(--index "$index")
 fi
 
-# Create transaction
+# ---------------- CREATE TRANSACTION ---------------- #
 echo -e "\n🛠️ Creating draft transaction..."
 echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee ${index_arg[*]}"
 
@@ -105,7 +103,7 @@ if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
   exit 1
 fi
 
-# Pick any .tx file in txs directory
+# ---------------- PICK TX FILE ---------------- #
 txfile=$(find "$TXS_DIR" -maxdepth 1 -type f -name '*.tx' | head -n 1)
 if [[ -z "$txfile" ]]; then
   echo "❌ No transaction file found after creating draft."
@@ -114,10 +112,10 @@ fi
 
 echo "✅ Draft transaction created: $txfile"
 
-# Send TX
+# ---------------- SEND TRANSACTION ---------------- #
 echo "🚀 Sending transaction..."
 if output=$(nockchain-wallet "${GRPC_ARGS[@]}" send-tx "$txfile" 2>&1 | grep -vE '^\x1b\[.*m(I|\[I)'); then
-  echo "$output" | grep -v "nockchain_wallet" # strips the extra chatter
+  echo "$output" | grep -v "nockchain_wallet"
   echo "✅ Transaction sent successfully!"
 else
   echo "❌ Failed to send transaction."
