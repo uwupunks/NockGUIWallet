@@ -1,5 +1,4 @@
 #!/bin/bash
-
 GRPC_ARGS=(--client public --public-grpc-server-addr https://nockchain-api.zorp.io)
 TXS_DIR="$(pwd)/txs"
 
@@ -38,7 +37,6 @@ total=$((gift + fee))
 echo -e "\n➕ Total amount needed (gift + fee): $total\n"
 
 csvfile="notes-${sender}.csv"
-
 echo "📂 Exporting notes CSV..."
 if ! nockchain-wallet "${GRPC_ARGS[@]}" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
   echo "❌ Failed to export notes CSV."
@@ -52,7 +50,7 @@ echo "Found!"
 # Select notes until total assets cover required amount
 selected_notes=()
 selected_assets=0
-while IFS=',' read -r name_first name_last assets _block_height _source_hash; do
+while IFS=',' read -r name_first name_last assets *block*height *source*hash; do
   [[ "$name_first" == "name_first" ]] && continue
   selected_notes+=("$name_first $name_last")
   selected_assets=$((selected_assets + assets))
@@ -85,24 +83,30 @@ echo -e "\n🧹 Cleaning transaction folder ($TXS_DIR)..."
 rm -f "$TXS_DIR"/*
 echo "🗑️ Folder cleaned."
 
-# Optional index argument array
-index_arg=()
-if [[ "$index" != "" ]]; then
-  index_arg=(--index "$index")
-fi
-
-# Create transaction
+# Create transaction with conditional index argument
 echo -e "\n🛠️ Creating draft transaction..."
-echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee ${index_arg[*]}"
 
-if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
-  --names "$names_arg" \
-  --recipients "$recipients_arg" \
-  --gifts "$gift" \
-  --fee "$fee" \
-  "${index_arg[@]}" >/dev/null; then
-  echo "❌ Failed to create draft transaction."
-  exit 1
+if [[ -n "$index" ]]; then
+  echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee --index $index"
+  if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
+    --names "$names_arg" \
+    --recipients "$recipients_arg" \
+    --gifts "$gift" \
+    --fee "$fee" \
+    --index "$index" >/dev/null; then
+    echo "❌ Failed to create draft transaction."
+    exit 1
+  fi
+else
+  echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee"
+  if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
+    --names "$names_arg" \
+    --recipients "$recipients_arg" \
+    --gifts "$gift" \
+    --fee "$fee" >/dev/null; then
+    echo "❌ Failed to create draft transaction."
+    exit 1
+  fi
 fi
 
 # Pick any .tx file in txs directory
