@@ -13,6 +13,8 @@ import csv
 import requests
 from datetime import datetime
 from tkinter import font
+import queue
+balance_queue = queue.Queue()
 
 nock_to_usd = 0.0
 change_24h = 0.0
@@ -191,7 +193,7 @@ class StatusBar(tk.Frame):
         # Connection status
         self.connection_label = tk.Label(
             self,
-            text="gRPC: http://localhost:5555 ✅",
+            text="API: https://nockchain-api.zorp.io ✅",
             font=("Segoe UI", 9),
             bg="#1F2937",
             fg="#10B981"
@@ -245,8 +247,8 @@ class StatusBar(tk.Frame):
         
         self.after(60000, self.update_price)  # Update every minute
 
-# --- gRPC Configuration ---
-GRPC_ADDRESS = "http://localhost:5555"
+# --- Updated gRPC Configuration ---
+GRPC_ARGS = ["--client", "public", "--public-grpc-server-addr", "https://nockchain-api.zorp.io"]
 
 def create_modern_window(title, width, height):
     """Helper function to create modern styled windows"""
@@ -333,11 +335,10 @@ def on_create_wallet():
     # Start background worker
     threading.Thread(target=worker, daemon=True).start()
 
-
 def worker():
     try:
         proc = subprocess.Popen(
-            ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "keygen"],
+            ["nockchain-wallet"] + GRPC_ARGS + ["keygen"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -378,14 +379,68 @@ def worker():
     except Exception as e:
         root.after(0, print_to_output, f"❌ Error creating wallet: {e}")
         root.after(0, lambda: messagebox.showerror("Error", f"Failed to create wallet:\n{e}"))
-        
-# Add these imports at the top of your wallet_gui.py file:
 
-# -- Create Children ---
+# -------------------- Helper Functions -------------------- #
+def extract_pubkey_from_output(output):
+    """Extract public key from derive-child command output"""
+    if not output:
+        return None
+
+    # Look for base58-like strings (length > 30 chars)
+    for line in output.splitlines():
+        line = line.strip()
+        # Remove leading label like "Public Key:" or "- Public Key:"
+        line = re.sub(r'^(?:-?\s*)?Public Key:\s*', '', line, flags=re.IGNORECASE)
+        # Remove quotes
+        if line.startswith("'") and line.endswith("'"):
+            line = line[1:-1]
+
+        # Only accept long alphanumeric strings (typical base58)
+        if len(line) > 30 and all(c in '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz' for c in line):
+            return line
+
+    return None
+
+def export_derived_children_csv(derived_children, output_text):
+    """Export derived children indexes and pubkeys to CSV"""
+    if not derived_children:
+        output_text.after(0, lambda: output_text.insert(tk.END, "⚠️ No derived children found.\n"))
+        return
+
+    filename = os.path.join(os.getcwd(), "childrenindexes.csv")
+    try:
+        with open(filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['index', 'pubkey'])
+            for child in derived_children:
+                writer.writerow([child['index'], child.get('pubkey') or ''])
+
+        output_text.after(0, lambda: output_text.insert(tk.END, f"📊 Derived children CSV exported: {filename}\n"))
+    except Exception as e:
+        output_text.after(0, lambda: output_text.insert(tk.END, f"⚠️ Could not export CSV: {str(e)}\n"))
+
+def save_derived_children(children_list):
+    """Save derived children information to a JSON file"""
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"derived_children_{timestamp}.json"
+        save_data = {
+            'derivation_session': timestamp,
+            'total_children': len(children_list),
+            'children': children_list
+        }
+        with open(filename, 'w') as f:
+            json.dump(save_data, f, indent=2)
+
+        output_text.after(0, lambda: output_text.insert(tk.END, f"📁 Child indices saved to: {filename}\n"))
+    except Exception as e:
+        output_text.after(0, lambda: output_text.insert(tk.END, f"⚠️ Warning: Could not save indices: {str(e)}\n"))
+
+# -------------------- Main Function -------------------- #
 def on_derive_children():
-    # Ask user how many children to derive
     num_children = simpledialog.askinteger(
-        "Derive Child Keys", "How many child keys would you like to derive?",
+        "Derive Child Keys",
+        "How many child keys would you like to derive?",
         minvalue=1, maxvalue=100
     )
     if not num_children:
@@ -393,35 +448,34 @@ def on_derive_children():
         output_text.insert(tk.END, "Child key derivation canceled.\n")
         output_text.config(state='disabled')
         return
-    
-    # Clear previous log and show starting message
+
+    # Clear previous log
     output_text.config(state='normal')
     output_text.delete('1.0', tk.END)
     output_text.insert(tk.END, f"🧬 Deriving {num_children} child key(s)...\n\n")
     output_text.config(state='disabled')
-    
-    # List to store derived child information
+
     derived_children = []
-    
+
+    def log_message(msg):
+        output_text.after(0, lambda: _log(msg))
+
+    def _log(msg):
+        output_text.config(state='normal')
+        output_text.insert(tk.END, msg + "\n")
+        output_text.see(tk.END)
+        output_text.config(state='disabled')
+
     def worker():
         for i in range(num_children):
-            # Show deriving child key message
-            output_text.config(state='normal')
-            output_text.insert(tk.END, f"➡️ Deriving child key {i}...\n")
-            output_text.see(tk.END)
-            output_text.config(state='disabled')
-            
-            # Run nockchain-wallet derive-child command
+            log_message(f"➡️ Deriving child key {i}...")
             try:
                 result = subprocess.run(
-                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "derive-child", str(i)],
+                    ["nockchain-wallet"] + GRPC_ARGS + ["derive-child", str(i)],
                     capture_output=True, text=True, check=True
                 )
-                
-                # Parse pubkey from the derive-child output
+
                 pubkey = extract_pubkey_from_output(result.stdout)
-                
-                # Save the child key information with index and pubkey
                 child_info = {
                     'index': i,
                     'pubkey': pubkey,
@@ -429,21 +483,14 @@ def on_derive_children():
                     'derive_output': result.stdout.strip() if result.stdout else None
                 }
                 derived_children.append(child_info)
-                
-                output_text.config(state='normal')
-                output_text.insert(tk.END, f"✅ Child key {i} derived successfully\n")
+
+                log_message(f"✅ Child key {i} derived successfully")
                 if pubkey:
-                    # Show first 16 and last 8 characters of pubkey for verification
-                    pubkey_preview = f"{pubkey[:16]}...{pubkey[-8:]}" if len(pubkey) > 24 else pubkey
-                    output_text.insert(tk.END, f"   📋 Pubkey: {pubkey_preview}\n")
-                output_text.config(state='disabled')
-                
+                    preview = f"{pubkey[:16]}...{pubkey[-8:]}" if len(pubkey) > 24 else pubkey
+                    log_message(f"   📋 Pubkey: {preview}")
+
             except subprocess.CalledProcessError as e:
-                output_text.config(state='normal')
-                output_text.insert(tk.END, f"❌ Error deriving child {i}: {e.stderr}\n")
-                output_text.config(state='disabled')
-                
-                # Still save the error information
+                log_message(f"❌ Error deriving child {i}: {e.stderr}")
                 child_info = {
                     'index': i,
                     'pubkey': None,
@@ -451,123 +498,17 @@ def on_derive_children():
                     'error': e.stderr.strip() if e.stderr else str(e)
                 }
                 derived_children.append(child_info)
-        
-        # Export to CSV with fixed filename
-        export_children_csv(derived_children)
-        
-        # Success message
-        output_text.config(state='normal')
-        output_text.insert(tk.END, f"\n✅ {len(derived_children)} children processed!\n")
-        output_text.insert(tk.END, "Get pubkeys to view derived keys.\n")
-        output_text.config(state='disabled')
-    
+
+        # After all children
+        log_message(f"\n✅ {len(derived_children)} children processed!")
+        log_message("Exporting CSV and saving JSON...")
+        export_derived_children_csv(derived_children, output_text)
+        save_derived_children(derived_children)
+        log_message("🔹 Derivation session complete!")
+
     threading.Thread(target=worker, daemon=True).start()
 
-def save_derived_children(children_list):
-    """Save derived children information to a JSON file"""
-    try:
-        # Create filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"derived_children_{timestamp}.json"
         
-        # Prepare data structure
-        save_data = {
-            'derivation_session': timestamp,
-            'total_children': len(children_list),
-            'children': children_list
-        }
-        
-        # Save to file
-        with open(filename, 'w') as f:
-            json.dump(save_data, f, indent=2)
-        
-        output_text.config(state='normal')
-        output_text.insert(tk.END, f"📁 Child indices saved to: {filename}\n")
-        output_text.config(state='disabled')
-        
-    except Exception as e:
-        output_text.config(state='normal')
-        output_text.insert(tk.END, f"⚠️ Warning: Could not save indices: {str(e)}\n")
-        output_text.config(state='disabled')
-
-def extract_pubkey_from_output(output):
-    """Extract public key from derive-child command output"""
-    if not output:
-        return None
-    
-    lines = output.strip().split('\n')
-    
-    # Look for the "- Public Key:" line and extract the key from the next line
-    for i, line in enumerate(lines):
-        line = line.strip()
-        
-        # Found the "- Public Key:" line
-        if line == "- Public Key:":
-            # The public key should be on the next line, wrapped in single quotes
-            if i + 1 < len(lines):
-                next_line = lines[i + 1].strip()
-                # Remove single quotes if present
-                if next_line.startswith("'") and next_line.endswith("'"):
-                    return next_line[1:-1]  # Remove the quotes
-                else:
-                    return next_line
-        
-        # Alternative: look for lines that start with a quote and contain a long string
-        elif line.startswith("'") and len(line) > 50:
-            # This might be the public key line directly
-            if line.endswith("'"):
-                return line[1:-1]  # Remove quotes
-    
-    # Fallback: look for any long alphanumeric string that could be a key
-    for line in lines:
-        line = line.strip()
-        if line.startswith("'") and line.endswith("'") and len(line) > 50:
-            potential_key = line[1:-1]  # Remove quotes
-            # Check if it looks like a base58 key (contains typical base58 chars)
-            if all(c in '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz' for c in potential_key):
-                return potential_key
-    
-    return None
-
-# Optional: Function to load previously derived children
-def load_derived_children(filename):
-    """Load previously derived children from JSON file"""
-    try:
-        with open(filename, 'r') as f:
-            data = json.load(f)
-        return data
-    except Exception as e:
-        print(f"Error loading derived children: {e}")
-        return None
-
-def export_children_csv(children_data):
-    """Export derived children to CSV format with fixed filename"""
-    filename = "childrenindexes.csv"
-    
-    try:
-        import csv
-        with open(filename, 'w', newline='') as csvfile:
-            fieldnames = ['index', 'pubkey', 'timestamp', 'status']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            
-            writer.writeheader()
-            for child in children_data:
-                writer.writerow({
-                    'index': child['index'],
-                    'pubkey': child.get('pubkey', 'N/A'),
-                    'timestamp': child['timestamp'],
-                    'status': 'Success' if child.get('pubkey') else 'Failed'
-                })
-        
-        output_text.config(state='normal')
-        output_text.insert(tk.END, f"📊 Children saved to: {filename}\n")
-        output_text.config(state='disabled')
-        
-    except Exception as e:
-        output_text.config(state='normal')
-        output_text.insert(tk.END, f"⚠️ Warning: Could not save CSV: {str(e)}\n")
-        output_text.config(state='disabled')
-       
 # --- Export Keys ---
 
 def on_export_keys():
@@ -580,7 +521,7 @@ def on_export_keys():
     def worker():
         try:
             proc = subprocess.Popen(
-                ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "export-keys"],
+                ["nockchain-wallet"] + GRPC_ARGS + ["export-keys"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -608,7 +549,7 @@ def on_export_keys():
             proc.wait()
 
             # Final success message
-            root.after(0, print_to_output, "✅ Wallet keys exported successfully inside Nockchain folder!")
+            root.after(0, print_to_output, "✅ Wallet keys exported successfully!")
             root.after(0, lambda: messagebox.showinfo(
                 "Keys Exported", 
                 f"Wallet keys exported successfully to:\n{export_path}"
@@ -644,7 +585,7 @@ def on_import_keys():
     def worker():
         try:
             process = subprocess.Popen(
-                ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "import-keys", "--file", file_path],
+                ["nockchain-wallet"] + GRPC_ARGS + ["import-keys", "--file", file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -688,7 +629,7 @@ ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 def get_pubkeys():
     try:
         proc = subprocess.Popen(
-            ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "list-pubkeys"],
+            ["nockchain-wallet"] + GRPC_ARGS + ["list-pubkeys"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True
@@ -776,121 +717,95 @@ def show_notification(title, message):
     # Auto close after 2 seconds
     notification.after(2000, notification.destroy)
     
+# -------------------- Helper Functions -------------------- #
 def truncate_pubkey(key, start_chars=32, end_chars=32):
-    """Shorten a public key for display purposes."""
     if len(key) <= start_chars + end_chars + 3:
         return key
     return f"{key[:start_chars]}...{key[-end_chars:]}"
     
-def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=None):
-    """Automatically check balance when a pubkey is selected"""
-    if not pubkey:
-        return
-        
-    # Update output to show checking status
-    output_text.config(state='normal')
-    output_text.delete('1.0', tk.END)
-    output_text.insert(tk.END, f"Auto-checking balance for selected key...\n")
-    output_text.insert(tk.END, f"Address: {truncate_pubkey(pubkey)}\n")
-    output_text.insert(tk.END, "Please wait...\n\n")
-    output_text.config(state='disabled')
-    
-    # Create queue for output updates
-    balance_queue = queue.Queue()
-    
-def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=None):
-    """Automatically check balance for a selected pubkey"""
-    if not pubkey:
-        return
+    # ---------------- Thread-safe logging ---------------- #
+def log_message(msg):
+    output_text.after(0, lambda: _append_text(msg))
 
-    # Show checking status
+def _append_text(msg):
     output_text.config(state='normal')
-    output_text.delete('1.0', tk.END)
-    output_text.insert(tk.END, f"Auto-checking balance for selected key...\n")
-    output_text.insert(tk.END, f"Address: {truncate_pubkey(pubkey)}\n")
-    output_text.insert(tk.END, "Please wait...\n\n")
+    output_text.insert(tk.END, msg + "\n")
+    output_text.see(tk.END)
+    output_text.config(state='disabled')
+
+# ---------------- CSV Parsing ---------------- #
+def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=None):
+    # Clear the output log before starting
+    output_text.config(state='normal')
+    output_text.delete("1.0", tk.END)
     output_text.config(state='disabled')
 
     balance_queue = queue.Queue()
 
     def run_balance_check():
         try:
-            proc = subprocess.Popen(
-                ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "list-notes-by-pubkey", pubkey],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
+            log_message(f"🔹 Checking balance for {truncate_pubkey(pubkey)}...")
+
+            # Run CSV command; wallet creates CSV automatically
+            subprocess.run(
+                ["nockchain-wallet"] + GRPC_ARGS + ["list-notes-by-pubkey-csv", pubkey],
+                check=True
             )
+            log_message("✅ Balance CSV generated successfully!")
 
-            total_assets = 0
-            required_sigs_list = []
-
-            for line in proc.stdout:
-                m_asset = re.search(r"- Assets:\s*(\d+)", line)
-                if m_asset:
-                    total_assets += int(m_asset.group(1))
-                m_sig = re.search(r"- Required Signatures:\s*(\d+)", line)
-                if m_sig:
-                    required_sigs_list.append(int(m_sig.group(1)))
-
-            proc.stdout.close()
-            proc.wait()
-
-            nocks = total_assets / 65536
-
-            # Determine coin status
-            if not required_sigs_list:
-                status_msg = "No 'Required Signatures' info found in notes."
-            elif all(m == 1 for m in required_sigs_list):
-                status_msg = "✅ Coins are Spendable! All required signatures = 1"
-            else:
-                status_msg = "💢 Some Coins are Unspendable! Required signatures > 1 detected"
-
-            # Calculate USD balance safely
-            try:
-                global nock_to_usd  # use the global price fetched elsewhere
-                usd_balance = nocks * nock_to_usd
-            except NameError:
-                usd_balance = 0.0
-
-            # Update the balance labels
+            # Parse CSV for summary
+            total_assets, nocks = parse_balance_csv(pubkey)
             if balance_main_label and balance_details_label:
-                balance_text = f"{nocks:,.4f} NOCK"
-                details_text = f"{total_assets:,} Nicks\n${usd_balance:,.2f} USD"
-                color = "#10b93d" if total_assets > 0 else "#FF0000"
-                
-                root.after(0, lambda: balance_main_label.config(text=balance_text, fg=color))
-                root.after(0, lambda: balance_details_label.config(text=details_text, fg="#6B7280"))
+                root.after(0, lambda: balance_main_label.config(
+                    text=f"{nocks:,.4f} NOCK",
+                    fg="#10b93d" if total_assets > 0 else "#FF0000"
+                ))
+                root.after(0, lambda: balance_details_label.config(
+                    text=f"{total_assets:,} Nicks\n${nocks * nock_to_usd:,.2f} USD",
+                    fg="#6B7280"
+                ))
 
-            # Build summary for output window
-            summary = (
-                f"\n{'='*50}\n"
-                f"🏦 AUTO BALANCE CHECK 🏦\n"
-                f"{'='*50}\n"
-                f"Selected Key: {truncate_pubkey(pubkey)}\n"
-                f"Total Assets: {total_assets:,} Nicks\n"
-                f"Equivalent: ~{nocks:,.4f} NOCK\n"
-                f"USD Value: ${usd_balance:,.2f}\n"
-                f"Status: {status_msg}\n"
-            )
-
-            balance_queue.put(summary)
-
+        except subprocess.CalledProcessError as e:
+            log_message(f"❌ Error running balance command: {e}")
         except Exception as e:
-            balance_queue.put(f"Error checking balance: {e}\n")
-            # Update labels on error
-            if balance_main_label and balance_details_label:
-                root.after(0, lambda: balance_main_label.config(text="Error", fg="#EF4444"))
-                root.after(0, lambda: balance_details_label.config(text="Failed to check balance", fg="#6B7280"))
+            log_message(f"❌ Unexpected error: {e}")
         finally:
             balance_queue.put(None)
 
-    # Start background thread
     threading.Thread(target=run_balance_check, daemon=True).start()
     update_output_text(output_text, balance_queue)
 
     
+CSV_FOLDER = os.path.expanduser("~/nockchain")  # adjust if needed
+
+def parse_balance_csv(pubkey):
+    # Look for CSV files starting with 'notes-' + pubkey
+    csv_files = [f for f in os.listdir(CSV_FOLDER)
+                 if f.startswith(f"notes-{pubkey}")]
+    
+    if not csv_files:
+        log_message("⚠️ No balance CSV found for this pubkey.")
+        return 0, 0
+
+    # If multiple, pick the latest by modification time
+    csv_files.sort(key=lambda f: os.path.getmtime(os.path.join(CSV_FOLDER, f)), reverse=True)
+    latest_csv = csv_files[0]
+    csv_path = os.path.join(CSV_FOLDER, latest_csv)
+    log_message(f"📄 Reading CSV: {latest_csv}")
+
+    total_assets = 0
+    with open(csv_path, newline='') as f:
+        reader = csv.reader(f)
+        next(reader, None)  # skip header
+        for row in reader:
+            if len(row) > 2 and row[2].isdigit():
+                total_assets += int(row[2])
+
+    nocks = total_assets / 65536
+    usd_balance = nocks * nock_to_usd
+    log_message(f"💰 Total Assets: {total_assets} Nicks (~{nocks:.4f} NOCK, ${usd_balance:.2f} USD)")
+    return total_assets, nocks
+
 def display_pubkeys(pubkeys):
     for widget in pubkeys_content.winfo_children():
         widget.destroy()
@@ -970,7 +885,7 @@ def display_pubkeys(pubkeys):
             scrollbar.pack(side="right", fill="y")
         dropdown_open.set(not dropdown_open.get())
 
-# Populate options
+    # Populate options
     for i, pk in enumerate(pubkeys):
         def select_key(idx=i):
             selected_index.set(idx)
@@ -1028,110 +943,6 @@ def resolve_nockaddress(name):
             return None
     except Exception:
         return None
-
-def open_check_balance_window():
-    win = create_modern_window("Check Balance", 600, 250)
-    
-    # Header
-    header_frame = tk.Frame(win, bg="#1F2937", height=60)
-    header_frame.pack(fill="x")
-    header_frame.pack_propagate(False)
-    tk.Label(
-        header_frame,
-        text="🏦 Check Account Balance",
-        font=("Segoe UI", 14, "bold"),
-        bg="#1F2937",
-        fg="white"
-    ).pack(pady=15)
-    
-    # Content frame
-    content = tk.Frame(win, bg="white")
-    content.pack(fill="both", expand=True, padx=20, pady=20)
-    
-    # Input section
-    tk.Label(content, text="Enter Pubkey:", font=("Segoe UI", 11, "bold"), bg="white", fg="#374151").pack(anchor="w", pady=(5,5))
-    
-    # Input frame with entry and button
-    input_frame = tk.Frame(content, bg="white")
-    input_frame.pack(fill="x", pady=(0,10))
-    
-    pubkey_entry = tk.Entry(input_frame, font=("Segoe UI", 11))
-    pubkey_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-    pubkey_entry.focus_set()
-    
-    def check_balance():
-        pubkey = pubkey_entry.get().strip()
-        if not pubkey:
-            messagebox.showerror("Input Error", "Please enter a public key.")
-            return
-        if not re.fullmatch(r"[A-Za-z0-9]+", pubkey):
-            messagebox.showerror("Input Error", "Invalid pubkey format. Only alphanumeric characters allowed.")
-            return
-        
-        # Show initial "Checking..." message in main GUI
-        output_text.config(state='normal')
-        output_text.delete('1.0', tk.END)
-        output_text.insert(tk.END, f"Checking balance...\nAddress: {truncate_pubkey(pubkey)}\nPlease wait...\n\n")
-        output_text.config(state='disabled')
-        
-        # Close popup immediately
-        win.destroy()
-        
-        # Queue for main GUI output
-        main_q = queue.Queue()
-        
-        def run_check_balance():
-            try:
-                proc = subprocess.Popen(
-                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "list-notes-by-pubkey", pubkey],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1
-                )
-                
-                total_assets = 0
-                required_sigs_list = []
-                
-                for line in proc.stdout:
-                    # Only extract assets and required signatures
-                    m_asset = re.search(r"- Assets:\s*(\d+)", line)
-                    if m_asset:
-                        total_assets += int(m_asset.group(1))
-                    m_sig = re.search(r"- Required Signatures:\s*(\d+)", line)
-                    if m_sig:
-                        required_sigs_list.append(int(m_sig.group(1)))
-                
-                proc.stdout.close()
-                proc.wait()
-                
-                nocks = total_assets / 65536
-                
-                if not required_sigs_list:
-                    status_msg = "No 'Required Signatures' info found in notes.\n"
-                elif all(m == 1 for m in required_sigs_list):
-                    status_msg = "✅ Coins are Spendable! All required signatures = 1"
-                else:
-                    status_msg = "💢 Some Coins are Unspendable! Required signatures > 1 detected"
-                
-                summary = f"\n{'='*50}\n"
-                summary += f"🏦 BALANCE SUMMARY 🏦\n"
-                summary += f"{'='*50}\n"
-                summary += f"Total Assets: {total_assets:,} Nicks\n"
-                summary += f"Equivalent: ~{nocks:,.4f} Nocks\n"
-                summary += f"Status: {status_msg}\n"
-                
-                main_q.put(summary)
-            except Exception as e:
-                main_q.put(f"Error checking balance: {e}\n")
-            finally:
-                main_q.put(None)
-        
-        threading.Thread(target=run_check_balance, daemon=True).start()
-        update_output_text(output_text, main_q)
-    
-    check_btn = tk.Button(input_frame, text="Check", command=check_balance, bg="#4F46E5", fg="white", font=("Segoe UI", 10, "bold"), padx=20)
-    check_btn.pack(side="right")
 
 def open_nocknames_window():
     win = create_modern_window("Nocknames", 800, 600)
@@ -1294,7 +1105,7 @@ def open_sign_message_window():
         def run_sign():
             try:
                 proc = subprocess.Popen(
-                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS, "sign-message", "-m", message],
+                    ["nockchain-wallet"] + GRPC_ARGS + ["sign-message", "-m", message],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
                 )
 
@@ -1413,8 +1224,8 @@ def open_verify_message_window():
         def run_verify():
             try:
                 proc = subprocess.Popen(
-                    ["nockchain-wallet", "--grpc-address", GRPC_ADDRESS,
-                     "verify-message", "-m", message, "-s", sig_file, "-p", pubkey],
+                    ["nockchain-wallet"] + GRPC_ARGS + 
+                     ["verify-message", "-m", message, "-s", sig_file, "-p", pubkey],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
                 )
 
@@ -1528,7 +1339,7 @@ def on_send():
 
     def run_send():
         try:
-            cmd = ["bash", "./sendsimple.sh", "--grpc-address", GRPC_ADDRESS]
+            cmd = ["bash", "./sendsimple.sh"] + GRPC_ARGS
             if index != "":
                 cmd.extend(["--index", index])
 
@@ -1700,7 +1511,7 @@ balance_details.pack()
 
 # --- Send Transaction Panel ---
 right_panel = tk.Frame(right_side, bg="#F9FAFB")
-right_panel.pack(fill="x", pady=(0,5))  \
+right_panel.pack(fill="x", pady=(0,5))
 
 # --- Directly below ---
 below_panel = tk.Frame(right_side, bg="#F9FAFB")
@@ -1711,7 +1522,7 @@ tk.Label(
     text="📡 Block Explorers",
     bg="#F9FAFB",
     font=("Segoe UI", 13, "bold")
-).pack(pady=20) \
+).pack(pady=20)
 
 btn_explorer = ModernButton(below_panel, text="🌐 NockBlocks", command=lambda: webbrowser.open_new_tab("https://nockblocks.com"), style="secondary")
 btn_explorer.pack(pady=(0,10))
@@ -1725,7 +1536,7 @@ tk.Label(
     text="🛟 Mining Pools",
     bg="#F9FAFB",
     font=("Segoe UI", 13, "bold")
-).pack(pady=20) \
+).pack(pady=20)
 
 btn_explorer = ModernButton(below_panel, text="🐬 NockPool", command=lambda: webbrowser.open_new_tab("https://nockpool.com"), style="secondary")
 btn_explorer.pack(pady=(0,10))
@@ -1767,7 +1578,6 @@ tk.Label(fields_frame, text="Index", font=("Segoe UI", 10, "bold"), bg="white", 
 index_entry = ModernEntry(fields_frame, placeholder="Enter index for Child or leave blank for Master...")
 index_entry.pack(fill="x", pady=(0, 15))
 
-
 btn_send = ModernButton(fields_frame, text="Send Transaction", command=on_send, style="primary")
 btn_send.pack(fill="x", pady=15)
 
@@ -1780,8 +1590,8 @@ output_text.config(state='normal')
 output_text.insert(tk.END, "Welcome to Robinhood's Nockchain Wallet Pro Edition!\n")
 output_text.insert(tk.END, "─" * 50 + "\n")
 output_text.insert(tk.END, "Click 'Get Pubkeys' to load your public keys.\n\n")
-output_text.insert(tk.END, f"gRPC Address: {GRPC_ADDRESS}\n")
-output_text.insert(tk.END, f"gRPC Status: ✅ Ready\n")
+output_text.insert(tk.END, f"API Server: https://nockchain-api.zorp.io\n")
+output_text.insert(tk.END, f"Connection Status: ✅ Ready\n")
 # Node status check
 if is_nockchain_running():
     node_status = "✅ Nockchain node is running"
