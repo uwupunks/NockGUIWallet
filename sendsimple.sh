@@ -1,6 +1,6 @@
 #!/bin/bash
 
-GRPC_ADDRESS="http://localhost:5555"
+GRPC_ARGS=(--client public --public-grpc-server-addr https://nockchain-api.zorp.io)
 TXS_DIR="$(pwd)/txs"
 
 echo "========================================"
@@ -12,10 +12,6 @@ echo
 index=""
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --grpc-address)
-      GRPC_ADDRESS="$2"
-      shift 2
-      ;;
     --index)
       index="$2"
       shift 2
@@ -44,7 +40,7 @@ echo -e "\n➕ Total amount needed (gift + fee): $total\n"
 csvfile="notes-${sender}.csv"
 
 echo "📂 Exporting notes CSV..."
-if ! nockchain-wallet --grpc-address "$GRPC_ADDRESS" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
+if ! nockchain-wallet "${GRPC_ARGS[@]}" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
   echo "❌ Failed to export notes CSV."
   exit 1
 fi
@@ -97,9 +93,9 @@ fi
 
 # Create transaction
 echo -e "\n🛠️ Creating draft transaction..."
-echo "Command: nockchain-wallet --grpc-address $GRPC_ADDRESS create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee ${index_arg[*]}"
+echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee ${index_arg[*]}"
 
-if ! nockchain-wallet --grpc-address "$GRPC_ADDRESS" create-tx \
+if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
   --names "$names_arg" \
   --recipients "$recipients_arg" \
   --gifts "$gift" \
@@ -120,7 +116,7 @@ echo "✅ Draft transaction created: $txfile"
 
 # Send TX
 echo "🚀 Sending transaction..."
-if output=$(nockchain-wallet --grpc-address "$GRPC_ADDRESS" send-tx "$txfile" 2>&1 | grep -vE '^\x1b\[.*m(I|\[I)'); then
+if output=$(nockchain-wallet "${GRPC_ARGS[@]}" send-tx "$txfile" 2>&1 | grep -vE '^\x1b\[.*m(I|\[I)'); then
   echo "$output" | grep -v "nockchain_wallet" # strips the extra chatter
   echo "✅ Transaction sent successfully!"
 else
