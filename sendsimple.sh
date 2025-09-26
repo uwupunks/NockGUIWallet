@@ -42,10 +42,10 @@ echo -e "\n➕ Total amount needed (gift + fee): $total\n"
 # ---------------- EXPORT NOTES CSV ---------------- #
 csvfile="notes-${sender}.csv"
 echo "📂 Exporting notes CSV..."
-if ! nockchain-wallet "${GRPC_ARGS[@]}" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
+nockchain-wallet "${GRPC_ARGS[@]}" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1 || {
   echo "❌ Failed to export notes CSV."
   exit 1
-fi
+}
 
 echo -n "⏳ Waiting for notes file ($csvfile)... "
 while [ ! -f "$csvfile" ]; do sleep 1; done
@@ -54,12 +54,25 @@ echo "Found!"
 # ---------------- SELECT NOTES ---------------- #
 selected_notes=()
 selected_assets=0
-while IFS=',' read -r name_first name_last assets _block_height _source_hash; do
-  [[ "$name_first" == "name_first" ]] && continue
+
+# Skip header
+tail -n +2 "$csvfile" | while IFS=',' read -r name_first name_last assets _block_height _source_hash; do
+  # Clean whitespace
+  name_first=$(echo "$name_first" | xargs)
+  name_last=$(echo "$name_last" | xargs)
+  assets=$(echo "$assets" | xargs)
+
+  # Skip if assets is not a number
+  [[ "$assets" =~ ^[0-9]+$ ]] || continue
+
   selected_notes+=("$name_first $name_last")
   selected_assets=$((selected_assets + assets))
-  if [ "$selected_assets" -ge "$total" ]; then break; fi
-done < "$csvfile"
+
+  # Stop once total assets >= required amount
+  if [ "$selected_assets" -ge "$total" ]; then
+    break
+  fi
+done
 
 if [ "$selected_assets" -lt "$total" ]; then
   echo "❌ Insufficient funds: found $selected_assets, need $total"
@@ -73,11 +86,12 @@ echo "💰 Total assets selected: $selected_assets"
 names_arg=""
 for note in "${selected_notes[@]}"; do
   [[ -n "$names_arg" ]] && names_arg+=","
-  names_arg+="[$note]"
+  names_arg+="\"[$note]\""
 done
 
-recipients_arg="[1 $recipient]"
+recipients_arg="\"[${gift} ${recipient}]\""
 
+# Clean transaction folder
 mkdir -p "$TXS_DIR"
 echo -e "\n🧹 Cleaning transaction folder ($TXS_DIR)..."
 rm -f "$TXS_DIR"/*
@@ -93,15 +107,15 @@ fi
 echo -e "\n🛠️ Creating draft transaction..."
 echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee ${index_arg[*]}"
 
-if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
+nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
   --names "$names_arg" \
   --recipients "$recipients_arg" \
   --gifts "$gift" \
   --fee "$fee" \
-  "${index_arg[@]}" >/dev/null; then
-  echo "❌ Failed to create draft transaction."
-  exit 1
-fi
+  "${index_arg[@]}" >/dev/null || {
+    echo "❌ Failed to create draft transaction."
+    exit 1
+}
 
 # ---------------- PICK TX FILE ---------------- #
 txfile=$(find "$TXS_DIR" -maxdepth 1 -type f -name '*.tx' | head -n 1)
