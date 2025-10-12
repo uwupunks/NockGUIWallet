@@ -734,6 +734,7 @@ def _append_text(msg):
     output_text.config(state='disabled')
 
 # ---------------- CSV Parsing ---------------- #
+CSV_FOLDER = os.path.expanduser("~/nockchain")  # adjust if needed
 def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=None):
     # Clear the output log before starting
     output_text.config(state='normal')
@@ -749,7 +750,8 @@ def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=No
             # Run CSV command; wallet creates CSV automatically
             subprocess.run(
                 ["nockchain-wallet"] + GRPC_ARGS + ["list-notes-by-pubkey-csv", pubkey],
-                check=True
+                check=True,
+                cwd=CSV_FOLDER
             )
             log_message("✅ Balance CSV generated successfully!")
 
@@ -774,9 +776,6 @@ def auto_check_balance(pubkey, balance_main_label=None, balance_details_label=No
 
     threading.Thread(target=run_balance_check, daemon=True).start()
     update_output_text(output_text, balance_queue)
-
-    
-CSV_FOLDER = os.path.expanduser("~/nockchain")  # adjust if needed
 
 def parse_balance_csv(pubkey):
     # Look for CSV files starting with 'notes-' + pubkey
