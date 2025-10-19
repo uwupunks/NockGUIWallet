@@ -124,6 +124,36 @@ output=$(nockchain-wallet "${GRPC_ARGS[@]}" send-tx "$txfile")
 if [[ $? -eq 0 ]]; then
   echo -e "\n📝 Transaction details:\n$output"
   echo "✅ Transaction sent successfully!"
+  
+  # Extract transaction ID from the filename (remove .tx extension)
+  tx_id=$(basename "$txfile" .tx)
+  
+  echo -e "\n🔍 Checking transaction acceptance status..."
+  echo "Transaction ID: $tx_id"
+  
+  # Try checking the transaction status multiple times
+  max_attempts=5
+  attempt=1
+  while [ $attempt -le $max_attempts ]; do
+    echo -e "\n📊 Attempt $attempt of $max_attempts..."
+    
+    # Check transaction acceptance status
+    acceptance_output=$(nockchain-wallet "${GRPC_ARGS[@]}" tx-accepted "$tx_id")
+    if [[ $? -eq 0 ]] && [[ $acceptance_output == *"accepted by node"* ]]; then
+      echo -e "Transaction Status:\n$acceptance_output"
+      echo "✅ Transaction has been accepted by the node!"
+      break
+    else
+      if [ $attempt -lt $max_attempts ]; then
+        echo "⏳ Transaction not yet accepted. Waiting before next check..."
+        sleep 10
+      else
+        echo -e "\n⚠️ Final status check results:\n$acceptance_output"
+        echo "⚠️ Transaction status unclear after $max_attempts attempts."
+      fi
+    fi
+    ((attempt++))
+  done
 else
   echo -e "\n❌ Error details:\n$output"
   echo "❌ Failed to send transaction."
