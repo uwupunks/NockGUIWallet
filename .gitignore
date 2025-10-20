@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__
+.eggs
+.venv
+build
+dist
+*.csv
+derived_children*
+txns/
+*.sig
