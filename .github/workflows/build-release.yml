@@ -35,7 +35,7 @@ jobs:
 
       - name: Build macOS app
         run: |
-          python setup.py py2app --alias
+          python setup.py py2app
 
       - name: Verify app bundle
         run: |

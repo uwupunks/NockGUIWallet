@@ -11,6 +11,7 @@ import sys
 import tkinter as tk
 from tkinter import messagebox
 
+
 def get_nockchain_wallet_path() -> str:
     """Get the path to the nockchain-wallet executable.
 
@@ -33,15 +34,20 @@ def get_nockchain_wallet_path() -> str:
         bundled_path = os.path.join(app_dir, "Resources", "nockchain-wallet")
         if os.path.exists(bundled_path):
             # Show warning dialog if using bundled version (only once)
-            root = tk.Tk()
-            root.withdraw()  # Hide the main window
-            messagebox.showwarning(
-                "Warning: Using Bundled nockchain-wallet",
-                "Warning: nockchain-wallet is not built. Using bundled version. "
-                "For best results build the official wallet binary from source: "
-                "https://github.com/zorp-corp/nockchain?tab=readme-ov-file#install-wallet",
-            )
-            root.destroy()
+            # Check if we have a display available before showing dialog
+            try:
+                root = tk.Tk()
+                root.withdraw()  # Hide the main window
+                messagebox.showwarning(
+                    "Warning: Using Bundled nockchain-wallet",
+                    "Warning: nockchain-wallet is not built. Using bundled version. "
+                    "For best results build the official wallet binary from source: "
+                    "https://github.com/zorp-corp/nockchain?tab=readme-ov-file#install-wallet",
+                )
+                root.destroy()
+            except tk.TclError:
+                # No display available, skip the warning dialog
+                pass
             return bundled_path
 
     # Fallback - assume it's in the current directory (for development)
