@@ -60,17 +60,19 @@ def show_notification(title: str, message: str) -> None:
         title: Notification title
         message: Notification message
     """
-    notification = tk.Toplevel()
+    if not wallet_state.root:
+        return
+
+    notification = tk.Toplevel(wallet_state.root)
     notification.title("")
-    notification.geometry(
-        "300x80+{}+{}".format(
-            notification.winfo_x() + notification.winfo_width() - 320,
-            notification.winfo_y() + 50,
-        )
-    )
     notification.configure(bg=COLORS["success"])
     notification.overrideredirect(True)
     notification.attributes("-topmost", True)
+    main_x = wallet_state.root.winfo_x()
+    main_y = wallet_state.root.winfo_y()
+    main_width = wallet_state.root.winfo_width()
+    main_height = wallet_state.root.winfo_height()
+    notification.geometry(f"300x80+{main_x + main_width - 320}+{main_y + main_height - 80}")
 
     tk.Label(
         notification,
@@ -88,7 +90,7 @@ def show_notification(title: str, message: str) -> None:
         fg="white",
     ).pack()
 
-    notification.after(2000, notification.destroy)
+    notification.after(3000, notification.destroy)
 
 
 def on_create_wallet() -> None:

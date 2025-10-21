@@ -66,7 +66,7 @@ def display_addresses(addresses: List[str]) -> None:
             cursor="hand2",
         )
         key_label.pack(anchor="w")
-        key_label.bind("<Button-1>", lambda e, a=address: copy_to_clipboard(a))
+        key_label.bind("<Button-1>", lambda e, addr=address: select_address(addr))
 
         # Buttons frame (right side)
         buttons_frame = ttk.Frame(addr_frame, style="White.TFrame")
@@ -90,6 +90,21 @@ def display_addresses(addresses: List[str]) -> None:
         check_btn.pack(side="right", padx=5)
 
 
+def select_address(address: str) -> None:
+    """Select an address - copy to clipboard and populate sender field.
+
+    Args:
+        address: The address to select
+    """
+    # Copy to clipboard
+    copy_to_clipboard(address)
+
+    # Populate sender field
+    if wallet_state.sender_entry:
+        wallet_state.sender_entry.entry.delete(0, tk.END)
+        wallet_state.sender_entry.entry.insert(0, address)
+
+
 def copy_to_clipboard(text: str) -> None:
     """Copy text to clipboard and show notification.
 
@@ -99,6 +114,7 @@ def copy_to_clipboard(text: str) -> None:
     if wallet_state.root is not None:
         wallet_state.root.clipboard_clear()
         wallet_state.root.clipboard_append(text)
-        from .ui_handlers import show_notification
+        # Import locally to avoid circular import
+        from ui_handlers import show_notification
 
         show_notification("Copied!", "Address copied to clipboard")
