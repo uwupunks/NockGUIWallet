@@ -111,31 +111,11 @@ class Application:
 
         # Addresses section
         address_frame = ModernFrame(left_panel, title="Addresses")
-        address_frame.pack(fill="x", expand=False, pady=(0, 15))
+        address_frame.pack(fill="both", expand=True, pady=(0, 15))
 
-        address_canvas = tk.Canvas(address_frame)
-        address_canvas.pack(side="left", fill="both", expand=True)
+        address_content = ttk.Frame(address_frame, style="Input.TFrame")
+        address_content.pack(fill="both", expand=True, padx=20, pady=20)
 
-        address_content = ttk.Frame(address_canvas, style="Input.TFrame")
-        address_content.pack(fill="both", expand=True)
-
-        address_content_window = address_canvas.create_window(
-            (0, 0), window=address_content, anchor="nw"
-        )
-        address_content.bind(
-            "<Configure>",
-            lambda e: address_canvas.configure(scrollregion=address_canvas.bbox("all")),
-        )
-        address_canvas.bind(
-            "<Configure>",
-            lambda e: address_canvas.itemconfig(address_content_window, width=e.width),
-        )
-
-        scrollbar = ttk.Scrollbar(
-            address_frame, orient="vertical", command=address_canvas.yview
-        )
-        address_canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
         wallet_state.address_content = address_content
 
         # Activity Log section
@@ -152,18 +132,6 @@ class Application:
         )
         output_text.pack(fill="both", expand=True, padx=20, pady=20)
         wallet_state.output_text = output_text
-
-        # Vertical scrollbar
-        vscrollbar = ttk.Scrollbar(output_text, orient="vertical")
-        vscrollbar.pack(side="right", fill="y")
-        output_text.config(yscrollcommand=vscrollbar.set)
-        vscrollbar.config(command=output_text.yview)
-
-        # Horizontal scrollbar
-        hscrollbar = ttk.Scrollbar(output_text, orient="horizontal")
-        hscrollbar.pack(side="bottom", fill="x")
-        output_text.config(xscrollcommand=hscrollbar.set)
-        hscrollbar.config(command=output_text.xview)
 
     def _create_right_panel(self, parent: ttk.Frame) -> None:
         right_side = ttk.Frame(parent, style="Status.TFrame")

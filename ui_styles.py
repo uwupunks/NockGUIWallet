@@ -156,6 +156,42 @@ def setup_styles(root: tk.Tk) -> None:
                     "font": (FONT_FAMILY, 10),
                 }
             },
+            "TEntry": {
+                "configure": {
+                    "font": (FONT_FAMILY, 10),
+                    "fieldbackground": COLORS["input_background"],
+                    "borderwidth": 0,
+                    "relief": "flat",
+                    "insertcolor": COLORS["text"],
+                }
+            },
+            "Modern.TEntry": {
+                "configure": {
+                    "font": (FONT_FAMILY, 10),
+                    "fieldbackground": COLORS["input_background"],
+                    "borderwidth": 0,
+                    "relief": "flat",
+                    "insertcolor": COLORS["text"],
+                    "foreground": COLORS["text"],
+                }
+            },
+            "Placeholder.TEntry": {
+                "configure": {
+                    "font": (FONT_FAMILY, 10),
+                    "fieldbackground": COLORS["input_background"],
+                    "borderwidth": 0,
+                    "relief": "flat",
+                    "insertcolor": COLORS["text"],
+                    "foreground": COLORS["text_light"],
+                }
+            },
+            "FormLabel.TLabel": {
+                "configure": {
+                    "background": COLORS["input_background"],
+                    "foreground": COLORS["text"],
+                    "font": (FONT_FAMILY, 10, "bold"),
+                }
+            },
         },
     )
     style.theme_use("modern")
