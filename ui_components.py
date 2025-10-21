@@ -11,7 +11,7 @@ from typing import Optional, Callable, Dict, Any
 
 
 class ModernButton(ttk.Button):
-    """A modern styled button widget with hover effects and state management."""
+    """A modern styled button widget with hover effects and rounded corners."""
 
     def __init__(
         self,
@@ -21,21 +21,26 @@ class ModernButton(ttk.Button):
         style: str = "primary",
         **kwargs: Any,
     ) -> None:
-        init_kwargs: Dict[str, Any] = {}
-        init_kwargs["text"] = text
-        init_kwargs["style"] = f"{style.capitalize()}.TButton"
+        # Create style name
+        style_name = f"{style.capitalize()}.TButton"
+
+        init_kwargs: Dict[str, Any] = {
+            "text": text,
+            "style": style_name,
+        }
         if command is not None:
             init_kwargs["command"] = command
+
         init_kwargs.update(kwargs)
+
         super().__init__(parent, **init_kwargs)
-        self.enabled = True
 
     def set_enabled(self, enabled: bool) -> None:
-        self.enabled = enabled
+        """Enable or disable the button."""
         if enabled:
-            self.state(["!disabled"])
+            self.configure(state="normal")
         else:
-            self.state(["disabled"])
+            self.configure(state="disabled")
 
 
 class ModernFrame(ttk.Frame):
@@ -48,16 +53,16 @@ class ModernFrame(ttk.Frame):
 
         if title:
             title_frame = ttk.Frame(self, style="ModernTitle.TFrame")
-            title_frame.pack(fill="x", pady=(0, 10))
+            title_frame.pack(fill="x", pady=(0, 5))
             title_frame.pack_propagate(False)
-            title_frame.configure(height=60)
+            title_frame.configure(height=45)
 
             title_label = ttk.Label(
                 title_frame,
                 text=title,
                 style="ModernTitle.TLabel",
             )
-            title_label.pack(anchor="w", pady=10)
+            title_label.pack(anchor="w", pady=(0, 5))
 
 
 class ModernEntry(ttk.Frame):
@@ -114,12 +119,12 @@ class StatusBar(ttk.Frame):
         self.price_callback = price_callback
         self.status_callback = status_callback
 
-        self.price_frame = ttk.Frame(self)
+        self.price_frame = ttk.Frame(self, style="Status.TFrame")
         self.price_frame.pack(side="left", padx=20)
 
         self.price_label = ttk.Label(
             self.price_frame,
-            text="NOCK: $0.000000",
+            text="NOCK: $0.00",
             style="Price.TLabel",
         )
         self.price_label.pack(side="left")
@@ -181,7 +186,7 @@ class StatusBar(ttk.Frame):
     def update_price(self) -> None:
         price, change = self.price_callback()
         if price:
-            self.price_label.configure(text=f"NOCK: ${price:.6f}")
+            self.price_label.configure(text=f"NOCK: ${price:.2f}")
             color = "#10B981" if change >= 0 else "#EF4444"
             symbol = "▲" if change >= 0 else "▼"
             self.change_label.configure(

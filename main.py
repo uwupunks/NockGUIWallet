@@ -4,7 +4,6 @@ This module handles application initialization, setup, and the main event loop.
 It ties together all the components and manages the application lifecycle.
 """
 
-import os
 import sys
 import tkinter as tk
 from tkinter import ttk
@@ -30,7 +29,7 @@ from ui_handlers import (
 )
 from api_handlers import get_price, is_rpc_up
 from constants import DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, COLORS, FONT_FAMILY
-import subprocess
+import ui_styles
 
 
 class Application:
@@ -40,7 +39,7 @@ class Application:
         wallet_state.set_root(self.root)  # Set root in global state
 
         self._configure_window()
-        self.setup_styles()
+        ui_styles.setup_styles(self.root)
         self._load_splash_screen()
 
     def _configure_window(self) -> None:
@@ -61,203 +60,6 @@ class Application:
 
         self.splash = SplashScreen(self.root)
 
-    def setup_styles(self) -> None:
-        self.style = ttk.Style(self.root)
-        self.style.theme_create(
-            "modern",
-            parent="clam",
-            settings={
-                "TButton": {
-                    "configure": {
-                        "padding": [20, 10, 20, 10],
-                        "font": (FONT_FAMILY, 10, "bold"),
-                    }
-                },
-                "Primary.TButton": {
-                    "configure": {
-                        "background": COLORS["primary"],
-                        "foreground": "white",
-                    },
-                    "map": {
-                        "background": [
-                            ("active", COLORS["primary_hover"]),
-                            ("disabled", "#9CA3AF"),
-                        ]
-                    },
-                },
-                "Secondary.TButton": {
-                    "configure": {
-                        "background": COLORS["secondary"],
-                        "foreground": "white",
-                    },
-                    "map": {
-                        "background": [
-                            ("active", COLORS["secondary_hover"]),
-                            ("disabled", "#9CA3AF"),
-                        ]
-                    },
-                },
-                "Success.TButton": {
-                    "configure": {
-                        "background": COLORS["success"],
-                        "foreground": "white",
-                    },
-                    "map": {
-                        "background": [
-                            ("active", COLORS["success_hover"]),
-                            ("disabled", "#9CA3AF"),
-                        ]
-                    },
-                },
-                "Danger.TButton": {
-                    "configure": {
-                        "background": COLORS["danger"],
-                        "foreground": "white",
-                    },
-                    "map": {
-                        "background": [
-                            ("active", COLORS["danger_hover"]),
-                            ("disabled", "#9CA3AF"),
-                        ]
-                    },
-                },
-                "Modern.TFrame": {"configure": {"background": COLORS["input_background"]}},
-                "ModernTitle.TFrame": {
-                    "configure": {"background": COLORS["input_background"]}
-                },
-                "ModernTitle.TLabel": {
-                    "configure": {
-                        "background": COLORS["input_background"],
-                        "foreground": COLORS["text"],
-                        "font": (FONT_FAMILY, 12, "bold"),
-                        "padding": 10,
-                    }
-                },
-                "Modern.TEntry": {
-                    "configure": {
-                        "fieldbackground": "white",
-                        "foreground": COLORS["text"],
-                        "font": (FONT_FAMILY, 10),
-                        "padding": [12, 8, 12, 8],
-                        "insertcolor": COLORS["primary"],
-                    },
-                    "map": {
-                        "bordercolor": [("focus", COLORS["primary"])],
-                        "lightcolor": [("focus", COLORS["primary"])],
-                    },
-                },
-                "Placeholder.TEntry": {
-                    "configure": {
-                        "fieldbackground": "white",
-                        "foreground": COLORS["text_light"],
-                        "font": (FONT_FAMILY, 10),
-                        "padding": [12, 8, 12, 8],
-                        "insertcolor": COLORS["primary"],
-                    },
-                    "map": {
-                        "bordercolor": [("focus", COLORS["primary"])],
-                        "lightcolor": [("focus", COLORS["primary"])],
-                    },
-                },
-                "ModernBorder.TFrame": {"configure": {"background": COLORS["border"]}},
-                "Status.TFrame": {"configure": {"background": COLORS["background"]}},
-                "Input.TFrame": {
-                    "configure": {"background": COLORS["input_background"]}
-                },
-                "White.TFrame": {"configure": {"background": "white"}},
-                "Price.TLabel": {
-                    "configure": {
-                        "background": COLORS["background"],
-                        "foreground": COLORS["success"],
-                        "font": (FONT_FAMILY, 9),
-                    }
-                },
-                "Change.TLabel": {
-                    "configure": {
-                        "background": COLORS["background"],
-                        "font": (FONT_FAMILY, 9),
-                    }
-                },
-                "Node.TLabel": {
-                    "configure": {
-                        "background": COLORS["background"],
-                        "font": (FONT_FAMILY, 9),
-                    }
-                },
-                "Connection.TLabel": {
-                    "configure": {
-                        "background": COLORS["background"],
-                        "foreground": COLORS["success"],
-                        "font": (FONT_FAMILY, 9),
-                    }
-                },
-                "Time.TLabel": {
-                    "configure": {
-                        "background": COLORS["background"],
-                        "foreground": COLORS["text_light"],
-                        "font": (FONT_FAMILY, 9),
-                    }
-                },
-                "BalanceMain.TLabel": {
-                    "configure": {
-                        "background": "white",
-                        "foreground": "#FF0000",
-                        "font": (FONT_FAMILY, 13, "bold"),
-                    }
-                },
-                "BalanceDetails.TLabel": {
-                    "configure": {
-                        "background": "white",
-                        "foreground": COLORS["text_light"],
-                        "font": (FONT_FAMILY, 11),
-                    }
-                },
-                "FormLabel.TLabel": {
-                    "configure": {
-                        "background": COLORS["input_background"],
-                        "foreground": COLORS["text"],
-                        "font": (FONT_FAMILY, 10, "bold"),
-                    }
-                },
-                "SectionTitle.TLabel": {
-                    "configure": {
-                        "background": COLORS["input_background"],
-                        "foreground": COLORS["text"],
-                        "font": (FONT_FAMILY, 13, "bold"),
-                    }
-                },
-                "HeaderLabel.TLabel": {
-                    "configure": {
-                        "background": COLORS["background"],
-                        "foreground": "white",
-                        "font": (FONT_FAMILY, 14, "bold"),
-                    }
-                },
-                "Addr.TFrame": {
-                    "configure": {
-                        "background": COLORS["background"],
-                        "relief": "solid",
-                        "borderwidth": 1,
-                    }
-                },
-                "AddrLabel.TLabel": {
-                    "configure": {
-                        "background": "white",
-                        "foreground": "#374151",
-                        "font": (FONT_FAMILY, 10, "bold"),
-                    }
-                },
-                "Key.TLabel": {
-                    "configure": {
-                        "background": "white",
-                        "foreground": COLORS["text_light"],
-                        "font": ("Consolas", 9),
-                    }
-                },
-            },
-        )
-        self.style.theme_use("modern")
-
     def _create_header(self) -> None:
         # Header frame
         header = ttk.Frame(self.root, style="Status.TFrame", height=60)
@@ -275,11 +77,6 @@ class Application:
         self._create_action_buttons(header_buttons)
 
     def _create_action_buttons(self, parent: ttk.Frame) -> None:
-        """Create action buttons in header.
-
-        Args:
-            parent: Parent frame for buttons
-        """
         buttons = [
             ("✨ Create Wallet", on_create_wallet, "secondary"),
             ("🧬 Derive Children", on_derive_children, "secondary"),
@@ -314,7 +111,7 @@ class Application:
 
         # Addresses section
         address_frame = ModernFrame(left_panel, title="Addresses")
-        address_frame.pack(fill="both", expand=True, pady=(0, 15))
+        address_frame.pack(fill="x", expand=False, pady=(0, 15))
 
         address_canvas = tk.Canvas(address_frame)
         address_canvas.pack(side="left", fill="both", expand=True)
@@ -343,9 +140,7 @@ class Application:
 
         # Activity Log section
         output_frame = ModernFrame(left_panel, title="Activity Log")
-        output_frame.configure(height=600)
         output_frame.pack(fill="both", expand=True)
-
         output_text = tk.Text(
             output_frame,
             font=("Consolas", 9),
@@ -353,7 +148,7 @@ class Application:
             bd=0,
             state="disabled",
             wrap="none",
-            height=600
+            height=20,
         )
         output_text.pack(fill="both", expand=True, padx=20, pady=20)
         wallet_state.output_text = output_text
@@ -371,8 +166,12 @@ class Application:
         hscrollbar.config(command=output_text.xview)
 
     def _create_right_panel(self, parent: ttk.Frame) -> None:
-        right_side = ttk.Frame(parent)
-        right_side.pack(side="right", fill="y", padx=(10, 0))
+        right_side = ttk.Frame(parent, style="Status.TFrame")
+        right_side.pack(side="right", fill="both", expand=True, padx=(10, 0))
+        right_side.grid_columnconfigure(0, weight=1)
+        right_side.rowconfigure(0, weight=0)  # Balance section (shrink to content)
+        right_side.rowconfigure(1, weight=9)  # Transaction section (most space)
+        right_side.rowconfigure(2, weight=3)  # Explorer section
 
         self._create_balance_section(right_side)
         self._create_transaction_section(right_side)
@@ -380,11 +179,10 @@ class Application:
 
     def _create_balance_section(self, parent: ttk.Frame) -> None:
         balance_frame = ModernFrame(parent, title="🏦 Balance 🏦")
-        balance_frame.pack(fill="x", pady=(0, 0))
+        balance_frame.grid(row=0, column=0, sticky="nsew")
 
-        balance_content = ttk.Frame(balance_frame, style="White.TFrame", height=100)
-        balance_content.pack(fill="x", padx=10, pady=10)
-        balance_content.pack_propagate(False)
+        balance_content = ttk.Frame(balance_frame, style="White.TFrame")
+        balance_content.pack(fill="x", expand=False, padx=10, pady=10)
 
         # Balance display elements
         balance_main = ttk.Label(
@@ -400,17 +198,16 @@ class Application:
             text="Select a key to view balance",
             style="BalanceDetails.TLabel",
         )
-        balance_details.pack()
+        balance_details.pack(pady=(0, 10))
         wallet_state.balance_details = balance_details
 
     def _create_transaction_section(self, parent: ttk.Frame) -> None:
         # Transaction panel
         right_panel = ttk.Frame(parent)
-        right_panel.pack(fill="x", pady=(0, 5))
+        right_panel.grid(row=1, column=0, sticky="nsew")
 
         send_frame = ModernFrame(right_panel, title="Send Transaction")
-        send_frame.pack(fill="x")
-        send_frame.config(width=400)
+        send_frame.pack(fill="both", expand=True)
 
         # Form fields container
         fields_frame = ttk.Frame(send_frame, style="Input.TFrame")
@@ -445,35 +242,46 @@ class Application:
         wallet_state.btn_send = send_btn
 
     def _create_explorer_section(self, parent: ttk.Frame) -> None:
-        # Block Explorers
-        explorer_panel = ttk.Frame(parent)
-        explorer_panel.pack(fill="x", pady=(0, 5))
+        # Explorer panel
+        explorer_panel = ttk.Frame(parent, style="Input.TFrame")
+        explorer_panel.grid(row=2, column=0, sticky="nsew")
+
+        explorer_content = ttk.Frame(explorer_panel, style="Input.TFrame")
+        explorer_content.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Configure grid for side-by-side layout
+        explorer_content.grid_columnconfigure(0, weight=1)
+        explorer_content.grid_columnconfigure(1, weight=1)
+
+        # Block Explorers (left side)
+        block_frame = ttk.Frame(explorer_content, style="Input.TFrame")
+        block_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
         ttk.Label(
-            explorer_panel,
+            block_frame,
             text="📡 Block Explorers",
             style="SectionTitle.TLabel",
-        ).pack(pady=20)
+        ).pack(pady=(0, 10))
 
         ModernButton(
-            explorer_panel,
+            block_frame,
             text="🌐 NockBlocks",
             command=lambda: self._open_url("https://nockblocks.com"),
             style="secondary",
         ).pack(pady=(0, 10))
 
-        # Mining Pools
-        pool_panel = ttk.Frame(parent, style="Input.TFrame")
-        pool_panel.pack(fill="x", pady=(0, 5))
+        # Mining Pools (right side)
+        pool_frame = ttk.Frame(explorer_content, style="Input.TFrame")
+        pool_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
         ttk.Label(
-            pool_panel,
+            pool_frame,
             text="🛟 Mining Pools",
             style="SectionTitle.TLabel",
-        ).pack(pady=20)
+        ).pack(pady=(0, 10))
 
         ModernButton(
-            pool_panel,
+            pool_frame,
             text="🐬 NockPool",
             command=lambda: self._open_url("https://nockpool.com"),
             style="secondary",
