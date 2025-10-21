@@ -28,7 +28,13 @@ from ui_handlers import (
     open_verify_message_window,
 )
 from api_handlers import get_price, is_rpc_up
-from constants import DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, COLORS, FONT_FAMILY
+from constants import (
+    DEFAULT_WINDOW_WIDTH,
+    DEFAULT_WINDOW_HEIGHT,
+    COLORS,
+    FONT_FAMILY,
+    get_nockchain_wallet_path,
+)
 import ui_styles
 
 
@@ -40,6 +46,10 @@ class Application:
 
         self._configure_window()
         ui_styles.setup_styles(self.root)
+
+        # Check nockchain-wallet availability and show warning if using bundled version
+        get_nockchain_wallet_path()
+
         self._load_splash_screen()
 
     def _configure_window(self) -> None:

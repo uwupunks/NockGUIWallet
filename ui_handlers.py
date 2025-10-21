@@ -32,7 +32,7 @@ from wallet_ops import (
 from ui_display import display_addresses
 from api_handlers import resolve_nockname, resolve_nockaddress
 from ui_components import ModernButton, ModernEntry, ModernFrame
-from constants import COLORS, GRPC_ARGS, ANSI_ESCAPE
+from constants import COLORS, GRPC_ARGS, ANSI_ESCAPE, get_nockchain_wallet_path
 
 
 def create_modern_window(title: str, width: int, height: int) -> tk.Toplevel:
@@ -72,7 +72,9 @@ def show_notification(title: str, message: str) -> None:
     main_y = wallet_state.root.winfo_y()
     main_width = wallet_state.root.winfo_width()
     main_height = wallet_state.root.winfo_height()
-    notification.geometry(f"300x80+{main_x + main_width - 320}+{main_y + main_height - 80}")
+    notification.geometry(
+        f"300x80+{main_x + main_width - 320}+{main_y + main_height - 80}"
+    )
 
     tk.Label(
         notification,
@@ -333,7 +335,9 @@ def on_derive_children():
             wallet_state.log_message(f"➡️ Deriving child key {i}...")
             try:
                 result = subprocess.run(
-                    ["nockchain-wallet"] + GRPC_ARGS + ["derive-child", str(i)],
+                    [get_nockchain_wallet_path()]
+                    + GRPC_ARGS
+                    + ["derive-child", str(i)],
                     capture_output=True,
                     text=True,
                     check=True,
@@ -466,7 +470,9 @@ def open_sign_message_window():
         def run_sign():
             try:
                 proc = subprocess.Popen(
-                    ["nockchain-wallet"] + GRPC_ARGS + ["sign-message", "-m", message],
+                    [get_nockchain_wallet_path()]
+                    + GRPC_ARGS
+                    + ["sign-message", "-m", message],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -607,7 +613,7 @@ def open_verify_message_window():
         def run_verify():
             try:
                 proc = subprocess.Popen(
-                    ["nockchain-wallet"]
+                    [get_nockchain_wallet_path()]
                     + GRPC_ARGS
                     + ["verify-message", "-m", message, "-s", sig_file, "-p", pubkey],
                     stdout=subprocess.PIPE,

@@ -1,0 +1,63 @@
+name: Build and Release macOS App
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools py2app pillow
+
+      - name: Install jaraco.text for py2app compatibility
+        run: |
+          pip install jaraco.text
+
+      - name: Verify nockchain-wallet executable exists
+        run: |
+          ls -la nockchain-wallet
+          file nockchain-wallet
+
+      - name: Build macOS app
+        run: |
+          python setup.py py2app --alias
+
+      - name: Verify app bundle
+        run: |
+          ls -la dist/
+          ls -la dist/NockGUIWallet.app/Contents/Resources/
+          test -f dist/NockGUIWallet.app/Contents/Resources/nockchain-wallet && echo "nockchain-wallet bundled successfully"
+
+      - name: Create app archive
+        run: |
+          cd dist
+          zip -r NockGUIWallet.app.zip NockGUIWallet.app
+
+      - name: Upload app to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NockGUIWallet-macOS
+          path: dist/NockGUIWallet.app.zip
+
+      - name: Upload app to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/NockGUIWallet.app.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,6 +6,52 @@ modules in the application.
 
 import os
 import re
+import shutil
+import sys
+import tkinter as tk
+from tkinter import messagebox
+
+def get_nockchain_wallet_path() -> str:
+    """Get the path to the nockchain-wallet executable.
+
+    First checks if nockchain-wallet is available in PATH.
+    If not, uses the bundled executable if running from a py2app bundle.
+
+    Returns:
+        Path to the nockchain-wallet executable
+    """
+    # Check if nockchain-wallet is in PATH
+    if shutil.which("nockchain-wallet"):
+        return "nockchain-wallet"
+
+    # Check if we're running from a py2app bundle
+    if getattr(sys, "frozen", False):
+        # Running in a bundle - executable is in MacOS, bundled files in Resources
+        app_dir = os.path.dirname(
+            os.path.dirname(sys.executable)
+        )  # Go up from MacOS to Contents
+        bundled_path = os.path.join(app_dir, "Resources", "nockchain-wallet")
+        if os.path.exists(bundled_path):
+            # Show warning dialog if using bundled version (only once)
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            messagebox.showwarning(
+                "Warning: Using Bundled nockchain-wallet",
+                "Warning: nockchain-wallet is not built. Using bundled version. "
+                "For best results build the official wallet binary from source: "
+                "https://github.com/zorp-corp/nockchain?tab=readme-ov-file#install-wallet",
+            )
+            root.destroy()
+            return bundled_path
+
+    # Fallback - assume it's in the current directory (for development)
+    local_path = os.path.join(os.path.dirname(__file__), "nockchain-wallet")
+    if os.path.exists(local_path):
+        return local_path
+
+    # Last resort - just use the command name and hope it's in PATH
+    return "nockchain-wallet"
+
 
 # API Configuration
 API_URL = "https://api.coinpaprika.com/v1/tickers/nock-nockchain"

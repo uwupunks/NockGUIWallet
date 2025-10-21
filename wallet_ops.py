@@ -15,7 +15,7 @@ from typing import List, Dict, Optional, Any, Tuple
 import re
 
 from state import wallet_state
-from constants import GRPC_ARGS, ANSI_ESCAPE, CSV_FOLDER
+from constants import GRPC_ARGS, ANSI_ESCAPE, CSV_FOLDER, get_nockchain_wallet_path
 
 
 def get_addresses() -> List[str]:
@@ -26,7 +26,7 @@ def get_addresses() -> List[str]:
     """
     try:
         proc = subprocess.Popen(
-            ["nockchain-wallet"] + GRPC_ARGS + ["list-master-addresses"],
+            [get_nockchain_wallet_path()] + GRPC_ARGS + ["list-master-addresses"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -51,7 +51,7 @@ def create_wallet() -> None:
     def worker():
         try:
             proc = subprocess.Popen(
-                ["nockchain-wallet"] + GRPC_ARGS + ["keygen"],
+                [get_nockchain_wallet_path()] + GRPC_ARGS + ["keygen"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -84,7 +84,7 @@ def export_keys() -> None:
     def worker():
         try:
             proc = subprocess.Popen(
-                ["nockchain-wallet"] + GRPC_ARGS + ["export-keys"],
+                [get_nockchain_wallet_path()] + GRPC_ARGS + ["export-keys"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -132,7 +132,9 @@ def import_keys(file_path: str) -> None:
     def worker():
         try:
             process = subprocess.Popen(
-                ["nockchain-wallet"] + GRPC_ARGS + ["import-keys", "--file", file_path],
+                [get_nockchain_wallet_path()]
+                + GRPC_ARGS
+                + ["import-keys", "--file", file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -184,7 +186,7 @@ def check_balance(address: str) -> None:
 
             # Run CSV command; wallet creates CSV automatically
             subprocess.run(
-                ["nockchain-wallet"]
+                [get_nockchain_wallet_path()]
                 + GRPC_ARGS
                 + ["list-notes-by-pubkey-csv", address],
                 check=True,
@@ -196,7 +198,7 @@ def check_balance(address: str) -> None:
             # TODO: move this to ui_handlers.py once refactored
             wallet_state.log_message(f"🔹 Setting active master address...")
             subprocess.run(
-                ["nockchain-wallet"]
+                [get_nockchain_wallet_path()]
                 + GRPC_ARGS
                 + ["set-active-master-address", address],
                 check=True,
@@ -375,5 +377,5 @@ def extract_values_from_output(value: str, output: str) -> List[str]:
     )
     if not values:
         wallet_state.log_message(f"⚠️ No values found for '{value}' in output.")
-        values = ['']
+        values = [""]
     return values

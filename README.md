@@ -118,17 +118,30 @@ python3 main.py
 
 ## Building Standalone Application
 
-### macOS (using py2app)
+### Automatic GitHub Releases
+
+The application is automatically built and released on GitHub:
+
+1. **Push to main branch**: Triggers a build and creates artifacts
+2. **Create a release**: Automatically builds and attaches the macOS `.app` file to the release
+
+The built application includes the bundled `nockchain-wallet` executable for users who don't have it installed system-wide.
+
+### Manual Building (macOS using py2app)
 
 ```bash
-# Install py2app
-pip3 install py2app
+# Install dependencies
+pip3 install py2app pillow jaraco.text
 
 # Build the application
-python3 setup.py py2app
+python3 setup.py py2app --alias
 ```
 
-This will create a standalone `.app` bundle in the `dist/` directory.
+This creates a standalone `.app` bundle in the `dist/` directory.
+
+### Download Pre-built Releases
+
+Visit the [Releases](https://github.com/uwupunks/NockGUIWallet/releases) page to download the latest pre-built macOS application.
 
 ## Configuration
 
