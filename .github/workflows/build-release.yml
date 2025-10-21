@@ -37,11 +37,9 @@ jobs:
         run: |
           # Create a dummy codesign script that always succeeds
           mkdir -p /tmp/dummy-codesign
-          cat > /tmp/dummy-codesign/codesign << 'EOF'
-#!/bin/bash
-echo "Dummy codesign: pretending to sign $@"
-exit 0
-EOF
+          echo '#!/bin/bash' > /tmp/dummy-codesign/codesign
+          echo 'echo "Dummy codesign: pretending to sign $@ "' >> /tmp/dummy-codesign/codesign
+          echo 'exit 0' >> /tmp/dummy-codesign/codesign
           chmod +x /tmp/dummy-codesign/codesign
           export PATH="/tmp/dummy-codesign:$PATH"
 
