@@ -258,7 +258,7 @@ def parse_balance_csv(address: str) -> Tuple[int, float]:
 def send_transaction(
     sender: str, recipient: str, amount: int, fee: int, index: Optional[str] = None
 ) -> None:
-    """Send a transaction asynchronously.
+    """Send a transaction asynchronously using pure Python implementation.
 
     Args:
         sender: Sender's address
@@ -270,45 +270,154 @@ def send_transaction(
 
     def run_transaction():
         try:
-            cmd = ["bash", "./sendsimple.sh"] + GRPC_ARGS
+            total_needed = amount + fee
+            wallet_state.log_message(
+                f"➕ Total amount needed (gift + fee): {total_needed}"
+            )
+
+            # Export notes CSV
+            csvfile = f"notes-{sender}.csv"
+            wallet_state.log_message("📂 Exporting notes CSV...")
+
+            subprocess.run(
+                [get_nockchain_wallet_path()]
+                + GRPC_ARGS
+                + ["list-notes-by-pubkey-csv", sender],
+                check=True,
+                cwd=os.getcwd(),
+            )
+
+            # Wait for CSV file
+            wallet_state.log_message("⏳ Waiting for notes file...")
+            import time
+
+            while not os.path.exists(csvfile):
+                time.sleep(1)
+            wallet_state.log_message("✅ Found notes CSV!")
+
+            # Parse CSV and select notes
+            selected_notes = []
+            selected_assets = 0
+
+            with open(csvfile, "r") as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if row[0] == "name_first":  # Skip header
+                        continue
+                    name_first, name_last, assets_str, _, _ = row
+                    assets = int(assets_str)
+                    selected_notes.append(f"{name_first} {name_last}")
+                    selected_assets += assets
+                    if selected_assets >= total_needed:
+                        break
+
+            if selected_assets < total_needed:
+                raise ValueError(
+                    f"❌ Insufficient funds: found {selected_assets}, need {total_needed}"
+                )
+
+            wallet_state.log_message(f"✅ Selected notes: {', '.join(selected_notes)}")
+            wallet_state.log_message(f"💰 Total assets selected: {selected_assets}")
+
+            # Build transaction arguments
+            names_arg = ",".join(f"[{note}]" for note in selected_notes)
+            recipients_arg = f"[1 {recipient}]"
+
+            # Prepare transaction folder
+            txs_dir = os.path.join(os.getcwd(), "txs")
+            os.makedirs(txs_dir, exist_ok=True)
+            wallet_state.log_message(f"🧹 Cleaning transaction folder ({txs_dir})...")
+
+            # Clean existing tx files
+            for f in os.listdir(txs_dir):
+                if f.endswith(".tx"):
+                    os.remove(os.path.join(txs_dir, f))
+            wallet_state.log_message("🗑️ Folder cleaned.")
+
+            # Create transaction
+            wallet_state.log_message("🛠️ Creating draft transaction...")
+
+            cmd = [
+                get_nockchain_wallet_path(),
+                "--client",
+                "public",
+                "--public-grpc-server-addr",
+                "https://nockchain-api.zorp.io",
+                "create-tx",
+                "--names",
+                names_arg,
+                "--recipients",
+                recipients_arg,
+                "--gifts",
+                str(amount),
+                "--fee",
+                str(fee),
+            ]
+
             if index:
                 cmd.extend(["--index", index])
 
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=txs_dir)
+            if result.returncode != 0:
+                raise Exception(f"Failed to create transaction: {result.stderr}")
+
+            # Find the created .tx file
+            tx_files = [f for f in os.listdir(txs_dir) if f.endswith(".tx")]
+            if not tx_files:
+                raise Exception("❌ No transaction file found after creating draft.")
+
+            txfile = os.path.join(txs_dir, tx_files[0])
+            wallet_state.log_message(f"✅ Draft transaction created: {txfile}")
+
+            # Send transaction
+            wallet_state.log_message("🚀 Sending transaction...")
+            result = subprocess.run(
+                [get_nockchain_wallet_path()] + GRPC_ARGS + ["send-tx", txfile],
+                capture_output=True,
                 text=True,
-                bufsize=1,
             )
 
-            if proc.stdin is None or proc.stdout is None or proc.stderr is None:
-                raise ValueError("stdin, stdout, or stderr is None")
+            if result.returncode != 0:
+                raise Exception(f"❌ Failed to send transaction: {result.stderr}")
 
-            # Send inputs to the script
-            proc.stdin.write(f"{sender}\n{recipient}\n{amount}\n{fee}\n")
-            proc.stdin.flush()
-            proc.stdin.close()
+            wallet_state.log_message("📝 Transaction details:")
+            wallet_state.log_message(result.stdout.strip())
+            wallet_state.log_message("✅ Transaction sent successfully!")
 
-            # Read stdout line by line and update UI immediately
-            for line in proc.stdout:
-                line = line.strip()
-                if line:  # Only log non-empty lines
-                    if "error" in line.lower():
-                        wallet_state.log_message(f"❌ {line}")
-                    elif "success" in line.lower():
-                        wallet_state.log_message(f"✅ {line}")
-                    else:
-                        wallet_state.log_message(line)
+            # Extract transaction ID and check acceptance
+            tx_id = os.path.splitext(os.path.basename(txfile))[0]
+            wallet_state.log_message("🔍 Checking transaction acceptance status...")
+            wallet_state.log_message(f"Transaction ID: {tx_id}")
 
-            # Read stderr if any
-            for line in proc.stderr:
-                line = line.strip()
-                if line:
-                    wallet_state.log_message(f"⚠️ {line}")
+            # Check transaction status multiple times
+            max_attempts = 5
+            for attempt in range(1, max_attempts + 1):
+                wallet_state.log_message(f"📊 Attempt {attempt} of {max_attempts}...")
 
-            proc.wait()
+                result = subprocess.run(
+                    [get_nockchain_wallet_path()] + GRPC_ARGS + ["tx-accepted", tx_id],
+                    capture_output=True,
+                    text=True,
+                )
+
+                if result.returncode == 0 and "accepted by node" in result.stdout:
+                    wallet_state.log_message("Transaction Status:")
+                    wallet_state.log_message(result.stdout.strip())
+                    wallet_state.log_message(
+                        "✅ Transaction has been accepted by the node!"
+                    )
+                    break
+                elif attempt < max_attempts:
+                    wallet_state.log_message(
+                        "⏳ Transaction not yet accepted. Waiting before next check..."
+                    )
+                    time.sleep(10)
+                else:
+                    wallet_state.log_message("⚠️ Final status check results:")
+                    wallet_state.log_message(result.stdout.strip())
+                    wallet_state.log_message(
+                        f"⚠️ Transaction status unclear after {max_attempts} attempts."
+                    )
 
             # Re-enable button after completion
             def reenable_btn():
