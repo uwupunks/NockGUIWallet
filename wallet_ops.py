@@ -258,7 +258,7 @@ def parse_balance_csv(address: str) -> Tuple[int, float]:
 def send_transaction(
     sender: str, recipient: str, amount: int, fee: int, index: Optional[str] = None
 ) -> None:
-    """Send a transaction.
+    """Send a transaction asynchronously.
 
     Args:
         sender: Sender's address
@@ -267,45 +267,73 @@ def send_transaction(
         fee: Fee in Nicks
         index: Optional index for child key
     """
-    try:
-        cmd = ["bash", "./sendsimple.sh"] + GRPC_ARGS
-        if index:
-            cmd.extend(["--index", index])
 
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,  # Changed to PIPE to handle errors
-            text=True,
-            bufsize=1,
-        )
+    def run_transaction():
+        try:
+            cmd = ["bash", "./sendsimple.sh"] + GRPC_ARGS
+            if index:
+                cmd.extend(["--index", index])
 
-        if proc.stdin is None or proc.stdout is None or proc.stderr is None:
-            raise ValueError("stdin, stdout, or stderr is None")
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
 
-        # Send inputs to the script
-        proc.stdin.write(f"{sender}\n{recipient}\n{amount}\n{fee}\n")
-        proc.stdin.flush()
-        proc.stdin.close()
+            if proc.stdin is None or proc.stdout is None or proc.stderr is None:
+                raise ValueError("stdin, stdout, or stderr is None")
 
-        # Read stdout
-        for line in proc.stdout:
-            if "error" in line.lower():
-                wallet_state.log_message(f"❌ {line.strip()}")
-            elif "success" in line.lower():
-                wallet_state.log_message(f"✅ {line.strip()}")
-            else:
-                wallet_state.log_message(line.strip())
+            # Send inputs to the script
+            proc.stdin.write(f"{sender}\n{recipient}\n{amount}\n{fee}\n")
+            proc.stdin.flush()
+            proc.stdin.close()
 
-        # Read stderr if any
-        for line in proc.stderr:
-            wallet_state.log_message(f"⚠️ {line.strip()}")
+            # Read stdout line by line and update UI immediately
+            for line in proc.stdout:
+                line = line.strip()
+                if line:  # Only log non-empty lines
+                    if "error" in line.lower():
+                        wallet_state.log_message(f"❌ {line}")
+                    elif "success" in line.lower():
+                        wallet_state.log_message(f"✅ {line}")
+                    else:
+                        wallet_state.log_message(line)
 
-        proc.wait()
+            # Read stderr if any
+            for line in proc.stderr:
+                line = line.strip()
+                if line:
+                    wallet_state.log_message(f"⚠️ {line}")
 
-    except Exception as e:
-        wallet_state.log_message(f"❌ Error sending transaction: {e}")
+            proc.wait()
+
+            # Re-enable button after completion
+            def reenable_btn():
+                if wallet_state.btn_send:
+                    wallet_state.btn_send.configure(text="Send Transaction")
+                    wallet_state.btn_send.set_enabled(True)
+
+            if wallet_state.root:
+                wallet_state.root.after(0, reenable_btn)
+
+        except Exception as e:
+            wallet_state.log_message(f"❌ Error sending transaction: {e}")
+
+            # Re-enable button on error too
+            def reenable_btn():
+                if wallet_state.btn_send:
+                    wallet_state.btn_send.configure(text="Send Transaction")
+                    wallet_state.btn_send.set_enabled(True)
+
+            if wallet_state.root:
+                wallet_state.root.after(0, reenable_btn)
+
+    # Start transaction in background thread
+    thread = threading.Thread(target=run_transaction, daemon=True)
+    thread.start()
 
 
 def truncate_address(address: str, start_chars: int = 8, end_chars: int = 8) -> str:

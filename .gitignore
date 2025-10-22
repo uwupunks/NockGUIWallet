@@ -6,5 +6,5 @@ build
 dist
 *.csv
 derived_children*
-txns/
+txs/
 *.sig

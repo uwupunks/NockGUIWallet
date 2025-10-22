@@ -160,8 +160,8 @@ def on_send() -> None:
         return
 
     if not (
-        re.fullmatch(r"[A-Za-z0-9]+", details["sender"])
-        and re.fullmatch(r"[A-Za-z0-9]+", details["recipient"])
+        re.fullmatch(r"[a-z0-9]+", details["sender"], flags=re.IGNORECASE)
+        and re.fullmatch(r"[a-z0-9]+", details["recipient"], flags=re.IGNORECASE)
     ):
         messagebox.showerror(
             "Input Error", "Sender and Recipient address must be alphanumeric."
@@ -176,7 +176,7 @@ def on_send() -> None:
         wallet_state.btn_send.configure(text="Sending...")
         wallet_state.btn_send.set_enabled(False)
 
-    # Send transaction
+    # Send transaction (now runs asynchronously)
     send_transaction(
         details["sender"],
         details["recipient"],
@@ -184,15 +184,6 @@ def on_send() -> None:
         int(details["fee"]),
         details["index"] if details["index"] else None,
     )
-
-    # Re-enable button after delay
-    def reenable_btn():
-        if wallet_state.btn_send:
-            wallet_state.btn_send.configure(text="Send Transaction")
-            wallet_state.btn_send.set_enabled(True)
-
-    if wallet_state.root:
-        wallet_state.root.after(8000, reenable_btn)
 
 
 def open_nocknames_window() -> None:

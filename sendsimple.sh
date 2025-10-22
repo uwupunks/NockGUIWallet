@@ -1,4 +1,23 @@
 #!/bin/bash
+
+# Determine nockchain-wallet path: prefer system-installed, fallback to bundled
+if command -v nockchain-wallet >/dev/null 2>&1; then
+  # System nockchain-wallet is available
+  NOCKCHAIN_WALLET="nockchain-wallet"
+elif [[ "$0" == *".app/Contents"* ]] || [[ -n "$APP_BUNDLE_PATH" ]]; then
+  # Running from app bundle and system version not available - use bundled executable
+  if [[ -n "$APP_BUNDLE_PATH" ]]; then
+    APP_DIR="$APP_BUNDLE_PATH"
+  else
+    APP_DIR="$(dirname "$(dirname "$(dirname "$0")")")"
+  fi
+  NOCKCHAIN_WALLET="$APP_DIR/Contents/Resources/nockchain-wallet"
+else
+  # No nockchain-wallet available
+  echo "❌ nockchain-wallet not found. Please install nockchain-wallet or run from the app bundle."
+  exit 1
+fi
+
 GRPC_ARGS=(--client public --public-grpc-server-addr https://nockchain-api.zorp.io)
 TXS_DIR="$(pwd)/txs"
 
@@ -38,7 +57,7 @@ echo -e "\n➕ Total amount needed (gift + fee): $total\n"
 
 csvfile="notes-${sender}.csv"
 echo "📂 Exporting notes CSV..."
-if ! nockchain-wallet "${GRPC_ARGS[@]}" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
+if ! "$NOCKCHAIN_WALLET" "${GRPC_ARGS[@]}" list-notes-by-pubkey-csv "$sender" >/dev/null 2>&1; then
   echo "❌ Failed to export notes CSV."
   exit 1
 fi
@@ -87,8 +106,8 @@ echo "🗑️ Folder cleaned."
 echo -e "\n🛠️ Creating draft transaction..."
 
 if [[ -n "$index" ]]; then
-  echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee --index $index"
-  if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
+  echo "Command: $NOCKCHAIN_WALLET ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee --index $index"
+  if ! "$NOCKCHAIN_WALLET" "${GRPC_ARGS[@]}" create-tx \
     --names "$names_arg" \
     --recipients "$recipients_arg" \
     --gifts $gift \
@@ -98,8 +117,8 @@ if [[ -n "$index" ]]; then
     exit 1
   fi
 else
-  echo "Command: nockchain-wallet ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee"
-  if ! nockchain-wallet "${GRPC_ARGS[@]}" create-tx \
+  echo "Command: $NOCKCHAIN_WALLET ${GRPC_ARGS[*]} create-tx --names $names_arg --recipients $recipients_arg --gifts $gift --fee $fee"
+  if ! "$NOCKCHAIN_WALLET" "${GRPC_ARGS[@]}" create-tx \
     --names "$names_arg" \
     --recipients "$recipients_arg" \
     --gifts $gift \
@@ -120,7 +139,7 @@ echo "✅ Draft transaction created: $txfile"
 
 # Send TX
 echo "🚀 Sending transaction..."
-output=$(nockchain-wallet "${GRPC_ARGS[@]}" send-tx "$txfile")
+output=$("$NOCKCHAIN_WALLET" "${GRPC_ARGS[@]}" send-tx "$txfile")
 if [[ $? -eq 0 ]]; then
   echo -e "\n📝 Transaction details:\n$output"
   echo "✅ Transaction sent successfully!"
@@ -138,7 +157,7 @@ if [[ $? -eq 0 ]]; then
     echo -e "\n📊 Attempt $attempt of $max_attempts..."
     
     # Check transaction acceptance status
-    acceptance_output=$(nockchain-wallet "${GRPC_ARGS[@]}" tx-accepted "$tx_id")
+    acceptance_output=$("$NOCKCHAIN_WALLET" "${GRPC_ARGS[@]}" tx-accepted "$tx_id")
     if [[ $? -eq 0 ]] && [[ $acceptance_output == *"accepted by node"* ]]; then
       echo -e "Transaction Status:\n$acceptance_output"
       echo "✅ Transaction has been accepted by the node!"
