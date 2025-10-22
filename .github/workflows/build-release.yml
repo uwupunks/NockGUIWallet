@@ -32,30 +32,25 @@ jobs:
         run: |
           ls -la nockchain-wallet
           file nockchain-wallet
-
+      - name: Import Code Signing Certificate    
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$MACOS_CERTIFICATE_PWD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$MACOS_CERTIFICATE_PWD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
       - name: Build macOS app
         run: |
-          # Create a dummy codesign script that always succeeds
-          mkdir -p /tmp/dummy-codesign
-          echo '#!/bin/bash' > /tmp/dummy-codesign/codesign
-          echo 'echo "Dummy codesign: pretending to sign $@ "' >> /tmp/dummy-codesign/codesign
-          echo 'exit 0' >> /tmp/dummy-codesign/codesign
-          chmod +x /tmp/dummy-codesign/codesign
-          export PATH="/tmp/dummy-codesign:$PATH"
-
-          # Set environment variables for ad-hoc signing
-          export CODESIGN_ALLOCATE=/usr/bin/codesign_allocate
-          export CODE_SIGN_IDENTITY="-"
-          export CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
+          export CODE_SIGN_IDENTITY="smoothiepool (uwupunks)"
 
           # Build the app
           python setup.py py2app
 
-          # After build, do real ad-hoc signing
-          if [ -d "dist/NockGUIWallet.app" ]; then
-            echo "Performing real ad-hoc signing..."
-            codesign --force --deep --sign - dist/NockGUIWallet.app || echo "Real signing failed, but app was built"
-          fi
+          # Verify signing
+          codesign -dv dist/NockGUIWallet.app || echo "Code signing verification failed"
 
       - name: Verify app bundle
         run: |
