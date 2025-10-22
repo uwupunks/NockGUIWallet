@@ -35,10 +35,20 @@ jobs:
 
       - name: Build macOS app
         run: |
-          # Build the app using alias mode (creates symlinks, skips full copying)
-          echo "Starting py2app build with --alias flag..."
-          if python setup.py py2app --alias; then
-            echo "✅ Build completed successfully"
+          # Choose build mode based on trigger
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "🔨 Building full distributable app for release..."
+            BUILD_CMD="python setup.py py2app"
+            BUILD_MODE="full"
+          else
+            echo "🔗 Building alias app for development/testing..."
+            BUILD_CMD="python setup.py py2app --alias"
+            BUILD_MODE="alias"
+          fi
+
+          # Execute the build
+          if $BUILD_CMD; then
+            echo "✅ Build completed successfully (mode: $BUILD_MODE)"
           else
             echo "❌ Build failed"
             exit 1
@@ -48,23 +58,42 @@ jobs:
           if [ -d "dist/NockGUIWallet.app" ]; then
             echo "✅ App directory found"
 
-            # Check if the executable exists (symlink in alias mode)
-            if [ -L "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ]; then
-              echo "✅ Executable symlink found"
-            else
-              echo "❌ Executable symlink not found"
-              exit 1
-            fi
+            if [ "$BUILD_MODE" = "alias" ]; then
+              # Check symlinks for alias mode
+              if [ -L "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ]; then
+                echo "✅ Executable symlink found"
+              else
+                echo "❌ Executable symlink not found"
+                exit 1
+              fi
 
-            # Check if nockchain-wallet symlink exists
-            if [ -L "dist/NockGUIWallet.app/Contents/Resources/nockchain-wallet" ]; then
-              echo "✅ nockchain-wallet symlink found"
-            else
-              echo "❌ nockchain-wallet symlink not found"
-            fi
+              if [ -L "dist/NockGUIWallet.app/Contents/Resources/nockchain-wallet" ]; then
+                echo "✅ nockchain-wallet symlink found"
+              else
+                echo "❌ nockchain-wallet symlink not found"
+              fi
 
-            echo "📦 App structure:"
-            find dist/NockGUIWallet.app -type l -exec ls -la {} \; | head -10
+              echo "📦 Alias app structure (symlinks):"
+              find dist/NockGUIWallet.app -type l -exec ls -la {} \; | head -10
+            else
+              # Check full copies for release mode
+              if [ -f "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ] && [ ! -L "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ]; then
+                echo "✅ Executable file found (not symlink)"
+              else
+                echo "❌ Executable file not found or is symlink"
+                exit 1
+              fi
+
+              if [ -f "dist/NockGUIWallet.app/Contents/Resources/nockchain-wallet" ] && [ ! -L "dist/NockGUIWallet.app/Contents/Resources/nockchain-wallet" ]; then
+                echo "✅ nockchain-wallet file found (not symlink)"
+              else
+                echo "❌ nockchain-wallet file not found or is symlink"
+              fi
+
+              echo "📦 Full app structure (copied files):"
+              ls -la dist/NockGUIWallet.app/Contents/MacOS/
+              ls -la dist/NockGUIWallet.app/Contents/Resources/ | head -10
+            fi
           else
             echo "❌ App directory not found"
             exit 1
