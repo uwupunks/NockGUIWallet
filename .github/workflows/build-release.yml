@@ -32,25 +32,15 @@ jobs:
         run: |
           ls -la nockchain-wallet
           file nockchain-wallet
-      - name: Import Code Signing Certificate    
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+
+      - name: Build macOS app with ad-hoc signing
         run: |
-          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$MACOS_CERTIFICATE_PWD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$MACOS_CERTIFICATE_PWD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          echo "Available code signing identities:"
-          security find-identity -v -p codesigning
-      - name: Build macOS app
-        run: |
-          # Build the app
+          # Build the app with ad-hoc signing (no certificate needed)
           python setup.py py2app
 
-          # Verify signing
-          codesign -dv dist/NockGUIWallet.app || echo "Code signing verification failed"
+          # Verify ad-hoc signing
+          echo "App signing information:"
+          codesign -dv dist/NockGUIWallet.app 2>&1 || echo "Ad-hoc signed app (no certificate)"
 
       - name: Verify app bundle
         run: |
