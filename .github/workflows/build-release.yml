@@ -59,11 +59,11 @@ jobs:
             echo "✅ App directory found"
 
             if [ "$BUILD_MODE" = "alias" ]; then
-              # Check symlinks for alias mode
-              if [ -L "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ]; then
-                echo "✅ Executable symlink found"
+              # Check symlinks for alias mode (python binary and data files are symlinked)
+              if [ -L "dist/NockGUIWallet.app/Contents/MacOS/python" ]; then
+                echo "✅ Python symlink found (alias mode)"
               else
-                echo "❌ Executable symlink not found"
+                echo "❌ Python symlink not found"
                 exit 1
               fi
 
@@ -71,6 +71,14 @@ jobs:
                 echo "✅ nockchain-wallet symlink found"
               else
                 echo "❌ nockchain-wallet symlink not found"
+              fi
+
+              # Check that main executable exists but is not a symlink
+              if [ -f "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ] && [ ! -L "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ]; then
+                echo "✅ Main executable exists (regular file in alias mode)"
+              else
+                echo "❌ Main executable missing or is symlink"
+                exit 1
               fi
 
               echo "📦 Alias app structure (symlinks):"
