@@ -279,13 +279,13 @@ def send_transaction(
             csvfile = f"notes-{sender}.csv"
             wallet_state.log_message("📂 Exporting notes CSV...")
 
-            subprocess.run(
+            cmd = (
                 [get_nockchain_wallet_path()]
                 + GRPC_ARGS
-                + ["list-notes-by-pubkey-csv", sender],
-                check=True,
-                cwd=os.getcwd(),
+                + ["list-notes-by-pubkey-csv", sender]
             )
+            wallet_state.log_message(f"Command: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True, cwd=os.getcwd())
 
             # Wait for CSV file
             wallet_state.log_message("⏳ Waiting for notes file...")
@@ -336,28 +336,27 @@ def send_transaction(
 
             # Create transaction
             wallet_state.log_message("🛠️ Creating draft transaction...")
-
-            cmd = [
-                get_nockchain_wallet_path(),
-                "--client",
-                "public",
-                "--public-grpc-server-addr",
-                "https://nockchain-api.zorp.io",
-                "create-tx",
-                "--names",
-                names_arg,
-                "--recipients",
-                recipients_arg,
-                "--gifts",
-                str(amount),
-                "--fee",
-                str(fee),
-            ]
+            cmd = (
+                [get_nockchain_wallet_path()]
+                + GRPC_ARGS
+                + [
+                    "create-tx",
+                    "--names",
+                    names_arg,
+                    "--recipients",
+                    recipients_arg,
+                    "--gifts",
+                    str(amount),
+                    "--fee",
+                    str(fee),
+                ]
+            )
 
             if index:
                 cmd.extend(["--index", index])
 
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=txs_dir)
+            wallet_state.log_message(f"Command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 raise Exception(f"Failed to create transaction: {result.stderr}")
 
@@ -371,11 +370,9 @@ def send_transaction(
 
             # Send transaction
             wallet_state.log_message("🚀 Sending transaction...")
-            result = subprocess.run(
-                [get_nockchain_wallet_path()] + GRPC_ARGS + ["send-tx", txfile],
-                capture_output=True,
-                text=True,
-            )
+            cmd = [get_nockchain_wallet_path()] + GRPC_ARGS + ["send-tx", txfile]
+            wallet_state.log_message(f"Command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.returncode != 0:
                 raise Exception(f"❌ Failed to send transaction: {result.stderr}")
@@ -394,11 +391,9 @@ def send_transaction(
             for attempt in range(1, max_attempts + 1):
                 wallet_state.log_message(f"📊 Attempt {attempt} of {max_attempts}...")
 
-                result = subprocess.run(
-                    [get_nockchain_wallet_path()] + GRPC_ARGS + ["tx-accepted", tx_id],
-                    capture_output=True,
-                    text=True,
-                )
+                cmd = [get_nockchain_wallet_path()] + GRPC_ARGS + ["tx-accepted", tx_id]
+                wallet_state.log_message(f"Command: {' '.join(cmd)}")
+                result = subprocess.run(cmd, capture_output=True, text=True)
 
                 if result.returncode == 0 and "accepted by node" in result.stdout:
                     wallet_state.log_message("Transaction Status:")
