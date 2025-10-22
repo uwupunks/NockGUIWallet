@@ -2,6 +2,9 @@
 
 A modern, user-friendly graphical wallet interface for Nockchain, built with Python and Tkinter. This wallet provides an intuitive way to manage your Nockchain assets with features like wallet creation, transaction management, address derivation, and more.
 
+<img width="1449" height="834" alt="image" src="https://github.com/user-attachments/assets/ffdb3618-f555-44e9-9a44-dec7ffd8b5cf" />
+
+
 ## Features
 
 - ✨ **Create Wallet**: Generate new Nockchain wallets
