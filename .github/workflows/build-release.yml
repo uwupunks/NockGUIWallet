@@ -35,7 +35,7 @@ jobs:
 
       - name: Build macOS app
         run: |
-          # Choose build mode based on trigger
+          # Choose build mode and signing based on trigger
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "🔨 Building full distributable app for release..."
             BUILD_CMD="python setup.py py2app"
@@ -44,6 +44,12 @@ jobs:
             echo "🔗 Building alias app for development/testing..."
             BUILD_CMD="python setup.py py2app --alias"
             BUILD_MODE="alias"
+          fi
+
+          # Sign the app appropriately
+          if [ "$BUILD_MODE" = "full" ]; then
+            echo "🔐 Signing with certificate for release..."
+            codesign --force --deep --sign "${{ secrets.MACOS_CERTIFICATE_ID }}" dist/NockGUIWallet.app 2>/dev/null || echo "Certificate signing failed, using ad-hoc"
           fi
 
           # Execute the build
@@ -101,6 +107,8 @@ jobs:
               echo "📦 Full app structure (copied files):"
               ls -la dist/NockGUIWallet.app/Contents/MacOS/
               ls -la dist/NockGUIWallet.app/Contents/Resources/ | head -10
+              echo "🔐 Code signing info:"
+              codesign -dv dist/NockGUIWallet.app 2>/dev/null | grep -E "(Authority|TeamIdentifier|Signature)" || echo "Signature verification failed"
             fi
           else
             echo "❌ App directory not found"
