@@ -44,8 +44,6 @@ jobs:
           security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
       - name: Build macOS app
         run: |
-          export CODE_SIGN_IDENTITY="smoothiepool (uwupunks)"
-
           # Build the app
           python setup.py py2app
 
