@@ -378,7 +378,9 @@ def send_transaction(
                 raise Exception(f"❌ Failed to send transaction: {result.stderr}")
 
             wallet_state.log_message("📝 Transaction details:")
-            wallet_state.log_message(result.stdout.strip())
+            cleaned_output = clean_wallet_output(result.stdout)
+            if cleaned_output.strip():
+                wallet_state.log_message(cleaned_output)
             wallet_state.log_message("✅ Transaction sent successfully!")
 
             # Extract transaction ID and check acceptance
@@ -397,7 +399,9 @@ def send_transaction(
 
                 if result.returncode == 0 and "accepted by node" in result.stdout:
                     wallet_state.log_message("Transaction Status:")
-                    wallet_state.log_message(result.stdout.strip())
+                    cleaned_status = clean_wallet_output(result.stdout)
+                    if cleaned_status.strip():
+                        wallet_state.log_message(cleaned_status)
                     wallet_state.log_message(
                         "✅ Transaction has been accepted by the node!"
                     )
@@ -409,7 +413,9 @@ def send_transaction(
                     time.sleep(10)
                 else:
                     wallet_state.log_message("⚠️ Final status check results:")
-                    wallet_state.log_message(result.stdout.strip())
+                    cleaned_status = clean_wallet_output(result.stdout)
+                    if cleaned_status.strip():
+                        wallet_state.log_message(cleaned_status)
                     wallet_state.log_message(
                         f"⚠️ Transaction status unclear after {max_attempts} attempts."
                     )
@@ -500,6 +506,68 @@ def remove_ansi_and_newlines(text: str) -> str:
         .replace("\n", "")
         .replace("\r", "")
     )
+
+
+def clean_wallet_output(output: str) -> str:
+    """Clean wallet command output by removing ANSI codes and irrelevant messages.
+
+    Args:
+        output: Raw output from wallet command
+
+    Returns:
+        Cleaned output suitable for display
+    """
+    if not output:
+        return ""
+
+    # Remove ANSI escape codes
+    cleaned = ANSI_ESCAPE.sub("", output)
+
+    # Split into lines and filter out irrelevant messages
+    lines = cleaned.split("\n")
+    filtered_lines = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Skip kernel boot messages
+        if "kernel::boot" in line:
+            continue
+
+        # Skip Tracy tracing messages
+        if "Tracy tracing" in line:
+            continue
+
+        # Skip kernel starting messages
+        if "kernel: starting" in line:
+            continue
+
+        # Skip build hash messages
+        if "build-hash" in line:
+            continue
+
+        # Skip connection messages (keep important ones)
+        if (
+            line.startswith("I")
+            and "connection" in line
+            and "Connected to public" in line
+        ):
+            continue
+
+        # Skip balance update messages
+        if "Received balance update" in line:
+            continue
+
+        # Skip command executed successfully messages
+        if "Command executed successfully" in line:
+            continue
+
+        # Keep important messages
+        filtered_lines.append(line)
+
+    return "\n".join(filtered_lines)
 
 
 def extract_values_from_output(value: str, output: str) -> List[str]:
