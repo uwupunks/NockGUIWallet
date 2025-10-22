@@ -33,14 +33,42 @@ jobs:
           ls -la nockchain-wallet
           file nockchain-wallet
 
-      - name: Build macOS app with ad-hoc signing
+      - name: Build macOS app
         run: |
-          # Build the app with ad-hoc signing (no certificate needed)
-          python setup.py py2app
+          # Build the app using alias mode (creates symlinks, skips full copying)
+          echo "Starting py2app build with --alias flag..."
+          if python setup.py py2app --alias; then
+            echo "✅ Build completed successfully"
+          else
+            echo "❌ Build failed"
+            exit 1
+          fi
 
-          # Verify ad-hoc signing
-          echo "App signing information:"
-          codesign -dv dist/NockGUIWallet.app 2>&1 || echo "Ad-hoc signed app (no certificate)"
+          # Verify app was created
+          if [ -d "dist/NockGUIWallet.app" ]; then
+            echo "✅ App directory found"
+
+            # Check if the executable exists (symlink in alias mode)
+            if [ -L "dist/NockGUIWallet.app/Contents/MacOS/NockGUIWallet" ]; then
+              echo "✅ Executable symlink found"
+            else
+              echo "❌ Executable symlink not found"
+              exit 1
+            fi
+
+            # Check if nockchain-wallet symlink exists
+            if [ -L "dist/NockGUIWallet.app/Contents/Resources/nockchain-wallet" ]; then
+              echo "✅ nockchain-wallet symlink found"
+            else
+              echo "❌ nockchain-wallet symlink not found"
+            fi
+
+            echo "📦 App structure:"
+            find dist/NockGUIWallet.app -type l -exec ls -la {} \; | head -10
+          else
+            echo "❌ App directory not found"
+            exit 1
+          fi
 
       - name: Verify app bundle
         run: |
