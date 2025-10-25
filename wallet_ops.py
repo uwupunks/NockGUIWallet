@@ -238,15 +238,12 @@ def parse_balance_csv(address: str) -> Tuple[int, float]:
     latest_csv = csv_files[0]
     csv_path = os.path.join(CSV_FOLDER, latest_csv)
     wallet_state.log_message(f"📄 Reading CSV: {latest_csv}")
-
-    total_assets = 0
-    with open(csv_path, newline="") as f:
-        reader = csv.reader(f)
-        next(reader, None)  # skip header
-        for row in reader:
-            version, name_first, name_last, assets_str, _, _ = row
-            assets = int(assets_str)
-            total_assets += int(assets)
+    try:
+        notes = parse_notes_from_csv(csv_path)
+        total_assets = sum(note["assets"] for note in notes)
+    except ValueError as e:
+        wallet_state.log_message(f"⚠️ Error parsing CSV: {e}")
+        return 0, 0.0
 
     nocks = total_assets / 65536
     usd_balance = nocks * wallet_state.price
@@ -254,6 +251,40 @@ def parse_balance_csv(address: str) -> Tuple[int, float]:
         f"💰 Total Assets: {total_assets} Nicks (~{nocks:.4f} NOCK, ${usd_balance:.2f} USD)"
     )
     return total_assets, nocks
+
+
+def parse_notes_from_csv(csv_path: str) -> List[Dict[str, Any]]:
+    """Parse notes from CSV file.
+
+    Args:
+        csv_path: Path to the CSV file
+
+    Returns:
+        List of notes as dicts with 'name_first', 'name_last', 'assets'
+    """
+    notes = []
+    with open(csv_path, newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+        if (
+            not header
+            or len(header) < 3
+            or header[0] != "name_first"
+            or header[2] != "assets"
+        ):
+            raise ValueError("Invalid CSV header")
+        for row in reader:
+            if len(row) < 3:
+                continue
+            name_first, name_last, assets_str = row[0], row[1], row[2]
+            try:
+                assets = int(assets_str)
+                notes.append(
+                    {"name_first": name_first, "name_last": name_last, "assets": assets}
+                )
+            except ValueError:
+                continue
+    return notes
 
 
 def send_transaction(
@@ -297,20 +328,21 @@ def send_transaction(
             wallet_state.log_message("✅ Found notes CSV!")
 
             # Parse CSV and select notes
+            try:
+                notes = parse_notes_from_csv(csvfile)
+            except ValueError as e:
+                raise ValueError(f"Error parsing CSV: {e}")
+
+            if not notes:
+                raise ValueError("No valid notes found in CSV")
+
             selected_notes = []
             selected_assets = 0
-
-            with open(csvfile, "r") as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if row[0] == "name_first":  # Skip header
-                        continue
-                    name_first, name_last, assets_str, _, _ = row
-                    assets = int(assets_str)
-                    selected_notes.append(f"{name_first} {name_last}")
-                    selected_assets += assets
-                    if selected_assets >= total_needed:
-                        break
+            for note in notes:
+                selected_notes.append(f"{note['name_first']} {note['name_last']}")
+                selected_assets += note["assets"]
+                if selected_assets >= total_needed:
+                    break
 
             if selected_assets < total_needed:
                 raise ValueError(
