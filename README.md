@@ -4,7 +4,6 @@ A modern, user-friendly graphical wallet interface for Nockchain, built with Pyt
 
 <img width="1449" height="834" alt="image" src="https://github.com/user-attachments/assets/ffdb3618-f555-44e9-9a44-dec7ffd8b5cf" />
 
-
 ## Features
 
 - ✨ **Create Wallet**: Generate new Nockchain wallets
@@ -199,9 +198,29 @@ The wallet provides detailed logging in the output panel. Check the logs for err
 4. Test thoroughly
 5. Submit a pull request
 
+## Binary Verification
+
+For security, the `nockchain-wallet` binary releases are signed with GPG. To verify a downloaded binary:
+
+1. Download the binary (`nockchain-wallet`) and its signature file (`nockchain-wallet.asc`)
+
+2. Import the public key:
+
+   ```bash
+   gpg --import keys/public_key.asc
+   ```
+
+3. Verify the signature:
+
+   ```bash
+   gpg --verify nockchain-wallet.asc nockchain-wallet
+   ```
+
+   You should see "Good signature from 'NockGUIWallet Release Signing Key <uwupunks@github.com>'".
+
 ## License
 
-This project is open source. Please check the license file for details.
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
 
 ## Support
 
