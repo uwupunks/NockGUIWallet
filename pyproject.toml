@@ -12,7 +12,6 @@ dependencies = [
     "importlib-resources==6.5.2; python_version < '3.11'",
     "pillow",
     "requests",
-    "tkinter",
 ]
 
 [tool.setuptools.data-files]
