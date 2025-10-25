@@ -23,16 +23,14 @@ Before running the Nockchain GUI Wallet, ensure you have the following installed
 
 ### Nockchain CLI
 
-- Nockchain CLI must be installed with all dependencies
+- Nockchain wallet CLI must be installed with all dependencies
 - Nockchain-wallet should be on the newest version
-- A Nockchain node must be running and synced to the latest block height
 
 ### System Requirements
 
 - **Python 3.8+**
 - **Tkinter** (usually included with Python)
 - **Pillow** (PIL) for image handling
-- **Requests** for API calls
 
 ### Dependencies
 
@@ -101,8 +99,8 @@ python3 main.py
 
 1. Launch the application
 2. Create a new wallet or import existing keys
-3. The wallet will automatically connect to your local Nockchain node
-4. Start managing your NOCK assets!
+3. The wallet will automatically connect to the Zorp public RPC
+4. Start managing your NOCK
 
 ### Key Features Usage
 
@@ -242,8 +240,5 @@ For issues and questions:
 - Check the troubleshooting section above
 - Review the application logs for error details
 - Ensure all prerequisites are properly installed
-- Verify your Nockchain node is running correctly
 
 ---
-
-**Note**: This wallet requires a running Nockchain node. Make sure your node is fully synced before use.
