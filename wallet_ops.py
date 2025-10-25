@@ -13,6 +13,7 @@ import json
 from datetime import datetime
 from typing import List, Dict, Optional, Any, Tuple
 import re
+import base58
 
 from state import wallet_state
 from constants import GRPC_ARGS, ANSI_ESCAPE, CSV_FOLDER, get_nockchain_wallet_path
@@ -288,7 +289,12 @@ def parse_notes_from_csv(csv_path: str) -> List[Dict[str, Any]]:
 
 
 def send_transaction(
-    sender: str, recipient: str, amount: int, fee: int, index: Optional[str] = None
+    sender: str,
+    recipient: str,
+    amount: int,
+    fee: int,
+    index: Optional[str] = None,
+    refund_pkh: Optional[str] = None,
 ) -> None:
     """Send a transaction asynchronously using pure Python implementation.
 
@@ -298,13 +304,14 @@ def send_transaction(
         amount: Amount in Nicks
         fee: Fee in Nicks
         index: Optional index for child key
+        refund_pkh: Optional refund public key hash for v0 notes
     """
 
     def run_transaction():
         try:
             total_needed = amount + fee
             wallet_state.log_message(
-                f"➕ Total amount needed (gift + fee): {total_needed}"
+                f"➕ Total amount needed (amount + fee): {total_needed}"
             )
 
             # Export notes CSV
@@ -354,7 +361,7 @@ def send_transaction(
 
             # Build transaction arguments
             names_arg = ",".join(f"[{note}]" for note in selected_notes)
-            recipients_arg = f"[1 {recipient}]"
+            recipient_arg = f"{recipient}:{amount}"
 
             # Prepare transaction folder
             txs_dir = os.path.join(os.getcwd(), "txs")
@@ -376,14 +383,15 @@ def send_transaction(
                     "create-tx",
                     "--names",
                     names_arg,
-                    "--recipients",
-                    recipients_arg,
-                    "--gifts",
-                    str(amount),
+                    "--recipient",
+                    recipient_arg,
                     "--fee",
                     str(fee),
                 ]
             )
+
+            if refund_pkh:
+                cmd.extend(["--refund-pkh", refund_pkh])
 
             if index:
                 cmd.extend(["--index", index])
@@ -392,6 +400,13 @@ def send_transaction(
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 raise Exception(f"Failed to create transaction: {result.stderr}")
+            if "Min fee not met" in result.stdout:
+                match = re.search(r'at least:\s*(\d+)\s*nicks', result.stdout)
+                if match:
+                    min_fee = match.group(1)
+                    raise Exception(f"Min fee not met. This transaction requires at least: {min_fee} nicks")
+                else:
+                    raise Exception("Min fee not met")
 
             # Find the created .tx file
             tx_files = [f for f in os.listdir(txs_dir) if f.endswith(".tx")]
@@ -565,23 +580,19 @@ def clean_wallet_output(output: str) -> str:
         if not line:
             continue
 
-        # Skip kernel boot messages
-        if "kernel::boot" in line:
+        # Skip irrelevant or noisy messages
+        skip_patterns = [
+            "kernel::boot",
+            "Tracy tracing",
+            "kernel: starting",
+            "build-hash",
+            "Command executed successfully",
+            ".hoon",
+        ]
+        if any(pattern in line for pattern in skip_patterns):
             continue
 
-        # Skip Tracy tracing messages
-        if "Tracy tracing" in line:
-            continue
-
-        # Skip kernel starting messages
-        if "kernel: starting" in line:
-            continue
-
-        # Skip build hash messages
-        if "build-hash" in line:
-            continue
-
-        # Skip connection messages (keep important ones)
+        # Skip specific connection messages
         if (
             line.startswith("I")
             and "connection" in line
@@ -593,8 +604,12 @@ def clean_wallet_output(output: str) -> str:
         if "Received balance update" in line:
             continue
 
-        # Skip command executed successfully messages
-        if "Command executed successfully" in line:
+        # Skip file path messages
+        if line.startswith("/") or "/Users/" in line or "/hoon/" in line:
+            continue
+
+        # Skip lines with null bytes (binary artifacts)
+        if "\x00" in line:
             continue
 
         # Keep important messages

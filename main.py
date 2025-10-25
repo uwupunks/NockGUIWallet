@@ -193,9 +193,9 @@ class Application:
 
         # Create form fields
         field_specs = [
-            ("Sender Public Key", "sender_entry", "Enter sender address..."),
-            ("Recipient Public Key", "recipient_entry", "Enter recipient address..."),
-            ("Gift Amount (Nicks)", "gift_entry", "0"),
+            ("Sender Address", "sender_entry", "Enter sender address..."),
+            ("Recipient Address", "recipient_entry", "Enter recipient address..."),
+            ("Amount (Nicks)", "amount_entry", "0"),
             ("Fee (Nicks)", "fee_entry", "0"),
         ]
 

@@ -43,7 +43,7 @@ pip install -e .
 Or manually:
 
 ```bash
-pip install pillow requests importlib-resources
+pip install pillow requests importlib-resources base58
 ```
 
 ## Installation
@@ -58,7 +58,7 @@ sudo apt update
 sudo apt install python3 python3-tk python3-pip
 
 # Install Python dependencies
-pip3 install pillow requests
+pip3 install pillow requests base58
 ```
 
 ### macOS
@@ -68,7 +68,7 @@ pip3 install pillow requests
 brew install python3
 
 # Install dependencies
-pip3 install pillow requests
+pip3 install pillow requests base58
 ```
 
 ### Windows
@@ -78,7 +78,7 @@ pip3 install pillow requests
 # During installation, make sure to check "Add Python to PATH"
 
 # Install dependencies
-pip install pillow requests
+pip install pillow requests base58
 ```
 
 ## Setup

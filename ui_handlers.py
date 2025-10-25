@@ -16,6 +16,8 @@ from tkinter import messagebox, filedialog, simpledialog, ttk
 import tkinter as tk
 from datetime import datetime
 
+import base58
+
 from state import wallet_state
 from wallet_ops import (
     get_addresses,
@@ -51,6 +53,22 @@ def create_modern_window(title: str, width: int, height: int) -> tk.Toplevel:
     win.geometry(f"{width}x{height}")
     win.configure(bg="#F9FAFB")
     return win
+
+
+def verify_address(pubkey: str) -> bool:
+    try:
+        decoded = base58.b58decode(pubkey)
+        return len(decoded) == 40
+    except Exception:
+        return False
+
+
+def verify_sender(pubkey: str) -> bool:
+    try:
+        decoded = base58.b58decode(pubkey)
+        return len(decoded) in [40, 97]
+    except Exception:
+        return False
 
 
 def show_notification(title: str, message: str) -> None:
@@ -169,7 +187,32 @@ def on_send() -> None:
         return
 
     if not (details["amount"].isdigit() and details["fee"].isdigit()):
-        messagebox.showerror("Input Error", "Gift and Fee must be numeric.")
+        messagebox.showerror("Input Error", "Amount and Fee must be numeric.")
+        return
+
+    # Validate sender address format
+    if not verify_sender(details["sender"]):
+        messagebox.showerror("Input Error", "Invalid sender address format.")
+        return
+
+    # Check if v0 notes (extended public key) and prompt for refund PKH
+    try:
+        decoded_sender = base58.b58decode(details["sender"])
+        is_v0 = len(decoded_sender) == 97
+    except Exception:
+        is_v0 = False
+
+    refund_pkh = None
+    if is_v0:
+        refund_pkh = simpledialog.askstring(
+            "Refund Public Key", "Enter refund public key hash for v0 notes:"
+        )
+        if not refund_pkh:
+            return
+
+    # Validate recipient address format
+    if not verify_address(details["recipient"]):
+        messagebox.showerror("Input Error", "Invalid recipient address format.")
         return
 
     if wallet_state.btn_send:
@@ -183,6 +226,7 @@ def on_send() -> None:
         int(details["amount"]),
         int(details["fee"]),
         details["index"] if details["index"] else None,
+        refund_pkh,
     )
 
 

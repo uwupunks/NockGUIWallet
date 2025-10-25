@@ -39,7 +39,7 @@ class WalletState:
         self.btn_send: Optional["ModernButton"] = None
         self.sender_entry: Optional["ModernEntry"] = None
         self.recipient_entry: Optional["ModernEntry"] = None
-        self.gift_entry: Optional["ModernEntry"] = None
+        self.amount_entry: Optional["ModernEntry"] = None
         self.fee_entry: Optional["ModernEntry"] = None
         self.index_entry: Optional["ModernEntry"] = None
 
@@ -165,7 +165,7 @@ class WalletState:
         return {
             "sender": self.sender_entry.get() if self.sender_entry else "",
             "recipient": self.recipient_entry.get() if self.recipient_entry else "",
-            "amount": self.gift_entry.get() if self.gift_entry else "",
+            "amount": self.amount_entry.get() if self.amount_entry else "",
             "fee": self.fee_entry.get() if self.fee_entry else "",
             "index": self.index_entry.get() if self.index_entry else "",
         }

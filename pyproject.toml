@@ -12,6 +12,7 @@ dependencies = [
     "importlib-resources==6.5.2; python_version < '3.11'",
     "pillow",
     "requests",
+    "base58",
 ]
 
 [tool.setuptools.data-files]
