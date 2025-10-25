@@ -269,14 +269,14 @@ def parse_notes_from_csv(csv_path: str) -> List[Dict[str, Any]]:
         if (
             not header
             or len(header) < 3
-            or header[0] != "name_first"
-            or header[2] != "assets"
+            or header[1] != "name_first"
+            or header[3] != "assets"
         ):
             raise ValueError("Invalid CSV header")
         for row in reader:
             if len(row) < 3:
                 continue
-            name_first, name_last, assets_str = row[0], row[1], row[2]
+            name_first, name_last, assets_str = row[1], row[2], row[3]
             try:
                 assets = int(assets_str)
                 notes.append(
