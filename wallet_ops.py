@@ -188,7 +188,7 @@ def check_balance(address: str) -> None:
             subprocess.run(
                 [get_nockchain_wallet_path()]
                 + GRPC_ARGS
-                + ["list-notes-by-pubkey-csv", address],
+                + ["list-notes-by-address-csv", address],
                 check=True,
                 cwd=CSV_FOLDER,
             )
@@ -244,8 +244,9 @@ def parse_balance_csv(address: str) -> Tuple[int, float]:
         reader = csv.reader(f)
         next(reader, None)  # skip header
         for row in reader:
-            if len(row) > 2 and row[2].isdigit():
-                total_assets += int(row[2])
+            version, name_first, name_last, assets_str, _, _ = row
+            assets = int(assets_str)
+            total_assets += int(assets)
 
     nocks = total_assets / 65536
     usd_balance = nocks * wallet_state.price
@@ -282,7 +283,7 @@ def send_transaction(
             cmd = (
                 [get_nockchain_wallet_path()]
                 + GRPC_ARGS
-                + ["list-notes-by-pubkey-csv", sender]
+                + ["list-notes-by-address-csv", sender]
             )
             wallet_state.log_message(f"Command: {' '.join(cmd)}")
             subprocess.run(cmd, check=True, cwd=os.getcwd())
