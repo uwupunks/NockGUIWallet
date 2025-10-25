@@ -36,8 +36,16 @@ Before running the Nockchain GUI Wallet, ensure you have the following installed
 
 ### Dependencies
 
+The project dependencies are defined in `pyproject.toml`. To install them:
+
 ```bash
-pip install pillow requests
+pip install -e .
+```
+
+Or manually:
+
+```bash
+pip install pillow requests importlib-resources
 ```
 
 ## Installation
@@ -131,12 +139,17 @@ The built application includes the bundled `nockchain-wallet` executable for use
 
 ### Manual Building (macOS using py2app)
 
-```bash
-# Install dependencies
-pip3 install py2app pillow jaraco.text
+The build configuration is defined in `pyproject.toml` for modern PEP 517 compliance.
 
-# Build the application
-python3 setup.py py2app --alias
+```bash
+# Install build dependencies
+pip3 install setuptools py2app pillow jaraco.text
+
+# Build the application (alias mode for development)
+python setup.py py2app --alias
+
+# Or build full distributable app
+python setup.py py2app
 ```
 
 This creates a standalone `.app` bundle in the `dist/` directory.

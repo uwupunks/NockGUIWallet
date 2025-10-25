@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools", "py2app"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "NockGUIWallet"
+version = "1.0.0"
+description = "A GUI wallet for NockChain"
+authors = [{name = "smoothiepool"}]
+requires-python = ">=3.8"
+dependencies = [
+    "importlib-resources==6.5.2; python_version < '3.11'",
+    "pillow",
+    "requests",
+]
+
+[tool.setuptools.data-files]
+"" = ["wallet.icon", "wallet.png", "nockchain-wallet"]
+
+[tool.py2app]
+app = ["main.py"]
+iconfile = "wallet.icon"
+argv_emulation = false
+packages = ["setuptools"]
+
+[tool.py2app.plist]
+CFBundleName = "NockGUIWallet"
+CFBundleDisplayName = "NockGUIWallet"
+CFBundleVersion = "1.0.0"
+CFBundleShortVersionString = "1.0.0"
+CFBundleIconFile = "wallet.icon"
